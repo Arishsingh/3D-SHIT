@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>arishsingh</title>
+  <!-- fully transparent icon (new URL so browsers drop any cached icon for localhost) -->
+  <link rel="icon" type="image/svg+xml" href="/blank-icon.svg?v=3" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/blank-icon.png?v=3" />
+  <link rel="apple-touch-icon" href="/blank-icon.png?v=3" />
+  <link rel="mask-icon" href="/blank-icon.svg?v=3" color="#000000" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --m-x: max(8vw, 22px, calc(env(safe-area-inset-left) + 16px));
+      --m-y: max(6vh, 20px, calc(env(safe-area-inset-top) + 12px));
+      --ink: #f6f3ec;
+      /* slight RGB split + glow, like text burned into compressed video */
+      --chroma: -1px 0 rgba(255, 70, 60, 0.55), 1px 0 rgba(70, 160, 255, 0.55), 0 0 6px rgba(255, 255, 255, 0.45);
+    }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+    canvas#view { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; font-family: "Share Tech Mono", "SF Mono", "Menlo", "Consolas", monospace; color: var(--ink); text-shadow: var(--chroma); filter: blur(0.45px); }
+    #hud .lbl { font-size: 0.42em; opacity: 0.8; letter-spacing: 0.04em; vertical-align: super; margin-left: 0.15em; }
+
+    /* top-right: REC, camera battery, date */
+    #tr { position: absolute; top: var(--m-y); right: var(--m-x); display: flex; align-items: center; gap: 0.7em; font-size: clamp(13px, 1.7vw, 24px); }
+    #rec { display: flex; align-items: center; gap: 0.4em; font-weight: 700; font-size: 1em; }
+    #rec .dot { width: 0.68em; height: 0.68em; border-radius: 50%; background: #ff2a1f; box-shadow: 0 0 8px #ff2a1f, 0 0 2px #ff7a70; animation: blink 1.2s steps(1, end) infinite; }
+    @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.08; } }
+    .batt { position: relative; width: 1.6em; height: 0.72em; border: 1.5px solid currentColor; border-radius: 2px; opacity: 0.85; box-shadow: 0 0 4px rgba(255,255,255,0.4); }
+    .batt::after { content: ""; position: absolute; right: -0.22em; top: 0.18em; width: 0.14em; height: 0.3em; background: currentColor; }
+    .batt i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 70%; background: currentColor; opacity: 0.85; }
+    #date { letter-spacing: 0.04em; }
+
+
+
+    /* round banner */
+    #banner { position: absolute; top: calc(var(--m-y) + 4vh); left: 0; right: 0; text-align: center; opacity: 0; transform: translateY(-6px); transition: opacity 0.35s, transform 0.35s; }
+    #banner.show { opacity: 1; transform: none; }
+    #banner-title { display: inline-block; font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif; font-weight: 900; font-style: italic; font-size: clamp(22px, 3.6vw, 52px); letter-spacing: 0.04em; transform: skewX(-8deg);
+      color: #e9372c; -webkit-text-stroke: 1.5px #fff6f0; text-shadow: 0 0 10px rgba(255, 40, 30, 0.6), 2px 2px 0 rgba(0,0,0,0.5); }
+    #banner.won #banner-title { color: #f4f1ea; -webkit-text-stroke: 1.5px #1c1a17; text-shadow: 0 0 10px rgba(255,255,255,0.5), 2px 2px 0 rgba(0,0,0,0.5); }
+    #banner-score { margin-top: 0.2em; font-size: clamp(14px, 1.9vw, 26px); letter-spacing: 0.25em; }
+
+    /* reticle: big thin circle + centre ring, and an artificial horizon */
+    #reticle { position: absolute; left: 50%; top: 50%; width: min(56vh, 62vw); aspect-ratio: 1; transform: translate(-50%, -50%); border: 1.5px solid rgba(255, 255, 255, 0); border-radius: 50%; box-shadow: none; transition: border-color 0.25s, box-shadow 0.25s; }
+    #reticle.on { border-color: rgba(255, 255, 255, 0.62); box-shadow: 0 0 6px rgba(255,255,255,0.25), inset 0 0 6px rgba(255,255,255,0.15); }
+    #cross { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -7px 0 0 -7px; border: 1.5px solid rgba(255, 255, 255, 0.75); border-radius: 50%; box-shadow: 0 0 4px rgba(255,255,255,0.4); transition: opacity 0.2s; opacity: 0; }
+    #cross.on { opacity: 1; }
+    #cross.on.aim { opacity: 0; }
+    #horizon { position: absolute; left: 0; right: 0; top: 50%; height: 0; opacity: 0; transition: opacity 0.25s; }
+    #horizon.on { opacity: 1; }
+    #horizon i { position: absolute; top: -0.75px; height: 1.5px; background: rgba(255, 255, 255, 0.55); box-shadow: 0 0 4px rgba(255,255,255,0.35); }
+    #horizon .a { left: 0; width: 11%; } #horizon .b { left: 15.5%; width: 12%; }
+    #horizon .c { right: 15.5%; width: 12%; } #horizon .d { right: 0; width: 11%; }
+
+
+
+
+    /* door prompt: one quiet line under the centre */
+    #prompt { position: absolute; left: 50%; top: 60%; transform: translate(-50%, 4px); display: flex; align-items: center; gap: 0.75em; font-size: clamp(11px, 1.05vw, 15px); letter-spacing: 0.22em; white-space: nowrap; opacity: 0; transition: opacity 0.25s, transform 0.25s; }
+    #prompt.show { opacity: 0.88; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
+    #prompt-key { border: 1px solid currentColor; border-radius: 3px; padding: 0.18em 0.5em 0.12em; font-size: 0.85em; letter-spacing: 0.12em; box-shadow: 0 0 5px rgba(255,255,255,0.25); }
+
+    /* cut to black when going through a door */
+    #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.45s ease-in; }
+    #fade.on { opacity: 1; transition: opacity 0.4s ease-out; }
+
+    /* damage */
+    #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(120,0,0,0) 35%, rgba(150,10,5,0.55) 75%, rgba(90,0,0,0.85) 100%); }
+
+    @media (max-width: 600px) {
+    }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="hurt"></div>
+  <div id="fade"></div>
+  <div id="hud">
+    <div id="tr">
+      <div id="rec"><span class="dot"></span>REC</div>
+      <span class="batt" aria-hidden="true"><i></i></span>
+      <span id="date">2026:11:09</span>
+    </div>
+    <div id="banner"><div id="banner-title">ROUND LOST</div><div id="banner-score">0 : 0</div></div>
+    <div id="horizon"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
+    <div id="reticle"><div id="cross"></div></div>
+    <div id="prompt"><span id="prompt-key">ENTER</span><span id="prompt-lbl">OPEN DOOR</span></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
