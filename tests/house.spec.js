@@ -187,6 +187,19 @@ test.describe('house', () => {
     expect((await popup).url()).toMatch(/^https:\/\//);
   });
 
+  test('smooth: shaders for the house and rooms are built at load, so doors never stall on a compile', async ({ page }) => {
+    await boot(page);
+    await takeControl(page);
+    const keys = () => page.evaluate(() => window.__bodycam.renderer.info.programs.map((p) => p.cacheKey).filter((k) => !/^(depth|distanceRGBA)/.test(k)));
+    const before = new Set(await keys());
+    for (const z of ['house', 'room0', 'room3']) {
+      await page.evaluate((z) => { const B = window.__bodycam; const d = B.DOORS.find((d) => d.to === z); B.goTo(z, d.at, d.yaw); }, z);
+      await page.waitForTimeout(500);
+    }
+    const added = (await keys()).filter((k) => !before.has(k));
+    expect(added, 'no new scene shaders compiled after load').toEqual([]);
+  });
+
   test('the figure never appears indoors and the house holds frame rate', async ({ page }) => {
     await boot(page);
     await takeControl(page);

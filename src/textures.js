@@ -1068,6 +1068,251 @@ export function bricksTexture(seed = 73) {
 }
 
 // ---------------------------------------------------------------- material library
+// ================================================================ blood (horror set dressing)
+// RGBA canvases: colour + alpha. Fresh centres are deep red and glossy-dark, edges dry to brown.
+function bloodBlob(g, x, y, rad, r, irr = 0.45) {
+  blobPath(g, x, y, rad, r, irr, 18);
+  const gr = g.createRadialGradient(x, y, 0, x, y, rad * 1.1);
+  gr.addColorStop(0, 'rgba(34,2,2,0.98)'); gr.addColorStop(0.55, 'rgba(54,4,3,0.96)'); gr.addColorStop(0.9, 'rgba(70,10,6,0.92)'); gr.addColorStop(1, 'rgba(52,20,10,0.85)');
+  g.fillStyle = gr; g.fill();
+}
+function drop(g, x, y, rad, ang = 0, stretch = 1) {
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = 'rgba(58,5,4,0.95)';
+  g.beginPath(); g.ellipse(0, 0, rad * stretch, rad, 0, 0, Math.PI * 2); g.fill();
+  if (stretch > 1.4) { g.beginPath(); g.ellipse(rad * stretch * 1.2, 0, rad * 0.45, rad * 0.4, 0, 0, Math.PI * 2); g.fill(); }
+  g.restore();
+}
+export function bloodTextures(seed = 161) {
+  const r = rng(seed), S = 512;
+  const out = {};
+  // a pool: one big irregular stain, a few smaller ones running into it, satellite drops
+  {
+    const [c, g] = mk(S);
+    bloodBlob(g, S / 2, S / 2, S * 0.3, r, 0.5);
+    for (let k = 0; k < 5; k++) { const a = r() * 6.28, d = S * (0.22 + r() * 0.1); bloodBlob(g, S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, S * (0.05 + r() * 0.08), r, 0.6); }
+    for (let k = 0; k < 40; k++) { const a = r() * 6.28, d = S * (0.3 + r() * 0.17); drop(g, S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, 2 + r() * 6, a, 1 + r() * 1.5); }
+    out.pool = c;
+  }
+  // splatter from an impact: dense centre, droplets flung outward as elongated streaks
+  {
+    const [c, g] = mk(S);
+    bloodBlob(g, S / 2, S / 2, S * 0.09, r, 0.7);
+    for (let k = 0; k < 160; k++) {
+      const a = r() * 6.28, d = S * Math.pow(r(), 0.7) * 0.46, rad = (1 + r() * 5) * (1 - d / (S * 0.5));
+      drop(g, S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, Math.max(1, rad), a, 1 + d / (S * 0.12));
+    }
+    out.splat = c;
+  }
+  // a drag trail: smeared streaks running left to right, thinning out, with finger lines
+  {
+    const W = 1024, H = 256;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    for (let k = 0; k < 90; k++) {
+      const y = H * (0.28 + r() * 0.44), x0 = r() * W * 0.5, len = W * (0.15 + r() * 0.5), w = 2 + r() * 9;
+      const gr = g.createLinearGradient(x0, 0, x0 + len, 0);
+      const a = (0.45 + r() * 0.5) * (1 - 0.6 * x0 / W);
+      gr.addColorStop(0, 'rgba(60,4,3,0)'); gr.addColorStop(0.15, `rgba(72,6,4,${a})`); gr.addColorStop(0.8, `rgba(70,14,8,${a * 0.7})`); gr.addColorStop(1, 'rgba(60,18,10,0)');
+      g.strokeStyle = gr; g.lineWidth = w; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x0, y); g.bezierCurveTo(x0 + len * 0.3, y + (r() - 0.5) * 16, x0 + len * 0.6, y + (r() - 0.5) * 16, x0 + len, y + (r() - 0.5) * 20); g.stroke();
+    }
+    // gaps where it lifted off the floor, and smudged blots where it dragged heavier
+    g.globalCompositeOperation = 'destination-out';
+    for (let k = 0; k < 6; k++) { const x = W * (0.2 + r() * 0.75), w = 20 + r() * 60; const gr = g.createLinearGradient(x - w, 0, x + w, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, `rgba(0,0,0,${0.5 + r() * 0.4})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - w, 0, w * 2, H); }
+    g.globalCompositeOperation = 'source-over';
+    for (let k = 0; k < 7; k++) bloodBlob(g, W * (0.05 + r() * 0.6), H * (0.4 + r() * 0.2), 10 + r() * 22, r, 0.7);
+    bloodBlob(g, 50, H / 2, 60, r, 0.5);
+    out.smear = c;
+  }
+  // a handprint: palm, four fingers, thumb, slid down a little
+  {
+    const [c, g] = mk(256);
+    g.fillStyle = 'rgba(60,6,4,0.9)';
+    const finger = (x, y, len, w, ang) => { g.save(); g.translate(x, y); g.rotate(ang); g.beginPath(); g.ellipse(0, -len / 2, w, len / 2, 0, 0, 6.3); g.fill(); g.restore(); };
+    g.beginPath(); g.ellipse(128, 160, 52, 58, 0, 0, 6.3); g.fill();
+    finger(92, 112, 70, 12, -0.25); finger(116, 104, 86, 12, -0.08); finger(141, 104, 82, 12, 0.06); finger(164, 114, 64, 11, 0.22);
+    finger(78, 170, 58, 13, -1.0);
+    // smear downward where it slid
+    for (let k = 0; k < 10; k++) { const x = 90 + k * 8, gr = g.createLinearGradient(0, 200, 0, 256); gr.addColorStop(0, 'rgba(58,8,5,0.6)'); gr.addColorStop(1, 'rgba(58,8,5,0)'); g.fillStyle = gr; g.fillRect(x, 200, 5, 40 + r() * 16); }
+    // break up the print so it reads as skin texture, not a stamp
+    g.globalCompositeOperation = 'destination-out';
+    for (let k = 0; k < 500; k++) { g.fillStyle = `rgba(0,0,0,${r() * 0.6})`; g.beginPath(); g.arc(r() * 256, r() * 256, 0.5 + r() * 2, 0, 6.3); g.fill(); }
+    g.globalCompositeOperation = 'source-over';
+    out.hand = c;
+  }
+  // wall drips: a splash near the top, runs down, each ending in a fat drop
+  {
+    const W = 256, H = 512;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    bloodBlob(g, W / 2, 50, 46, r, 0.6);
+    for (let k = 0; k < 9; k++) {
+      const x = W / 2 + (r() - 0.5) * 80, len = 80 + r() * 380, w = 3 + r() * 6;
+      const gr = g.createLinearGradient(0, 50, 0, 50 + len);
+      gr.addColorStop(0, 'rgba(56,5,4,0.95)'); gr.addColorStop(1, 'rgba(48,8,5,0.85)');
+      g.strokeStyle = gr; g.lineWidth = w; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x, 50); g.lineTo(x + (r() - 0.5) * 4, 50 + len); g.stroke();
+      g.fillStyle = 'rgba(44,4,3,0.95)'; g.beginPath(); g.ellipse(x, 50 + len, w * 0.9, w * 1.3, 0, 0, 6.3); g.fill();
+    }
+    out.drips = c;
+  }
+  return out;
+}
+// Letters daubed on a wall in blood, each stroke running.
+export function bloodWritingTexture(text = 'GET OUT', seed = 191) {
+  const r = rng(seed), W = 1024, H = 384;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = 230; g.font = `900 ${size}px Impact, "Arial Black", sans-serif`;
+  const w = g.measureText(text).width; if (w > W * 0.92) { size = Math.floor(size * W * 0.92 / w); g.font = `900 ${size}px Impact, "Arial Black", sans-serif`; }
+  // finger-painted: draw the text several times jittered so the edges are ragged
+  for (let k = 0; k < 7; k++) { g.fillStyle = `rgba(${60 + r() * 20},${4 + r() * 4},4,0.35)`; g.save(); g.translate(W / 2 + (r() - 0.5) * 10, H * 0.42 + (r() - 0.5) * 8); g.rotate((r() - 0.5) * 0.03); g.fillText(text, 0, 0); g.restore(); }
+  g.fillStyle = 'rgba(58,4,3,0.9)'; g.fillText(text, W / 2, H * 0.42);
+  // runs from the bottom of the letters
+  const img = g.getImageData(0, 0, W, H).data;
+  for (let k = 0; k < 40; k++) {
+    const x = Math.floor(W * 0.06 + r() * W * 0.88);
+    let y = H - 1; while (y > 0 && img[(y * W + x) * 4 + 3] < 120) y--;
+    if (y < H * 0.3) continue;
+    const len = 20 + r() * (H - y - 10), wd = 2 + r() * 4;
+    g.strokeStyle = 'rgba(52,4,3,0.9)'; g.lineWidth = wd; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + (r() - 0.5) * 3, Math.min(H - 6, y + len)); g.stroke();
+    g.fillStyle = 'rgba(40,3,2,0.95)'; g.beginPath(); g.ellipse(x, Math.min(H - 6, y + len), wd * 0.9, wd * 1.3, 0, 0, 6.3); g.fill();
+  }
+  return c;
+}
+// Tally marks scratched into the concrete and smeared with blood: someone counting days.
+export function tallyTexture(seed = 193) {
+  const r = rng(seed), W = 512, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  g.lineCap = 'round';
+  let x = 20, y = 30;
+  for (let grp = 0; grp < 11; grp++) {
+    for (let i = 0; i < 4; i++) { const xx = x + i * 14 + (r() - 0.5) * 3; g.strokeStyle = 'rgba(30,24,20,0.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(xx, y + (r() - 0.5) * 4); g.lineTo(xx + (r() - 0.5) * 6, y + 60 + (r() - 0.5) * 6); g.stroke(); }
+    g.beginPath(); g.moveTo(x - 6, y + 50); g.lineTo(x + 52, y + 10); g.stroke();
+    if (r() < 0.5) { g.strokeStyle = 'rgba(70,6,4,0.6)'; g.lineWidth = 5; g.beginPath(); g.moveTo(x, y + 10); g.lineTo(x + 40, y + 55); g.stroke(); }
+    x += 80; if (x > W - 70) { x = 20 + r() * 10; y += 95; }
+  }
+  return c;
+}
+// One bloody shoe print (sole + heel), toe pointing up the canvas.
+export function footprintTexture(seed = 195) {
+  const r = rng(seed), W = 128, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(56,5,4,0.9)';
+  g.beginPath(); g.ellipse(64, 80, 40, 66, 0, 0, 6.3); g.fill();          // ball of the foot
+  g.beginPath(); g.ellipse(62, 200, 30, 38, 0, 0, 6.3); g.fill();         // heel
+  // tread pattern and wear: knock out stripes and speckle
+  g.globalCompositeOperation = 'destination-out';
+  for (let y = 20; y < 150; y += 12) { g.fillStyle = 'rgba(0,0,0,0.75)'; g.fillRect(20, y, 90, 4); }
+  for (let y = 170; y < 240; y += 12) { g.fillStyle = 'rgba(0,0,0,0.75)'; g.fillRect(28, y, 70, 4); }
+  for (let k = 0; k < 300; k++) { g.fillStyle = `rgba(0,0,0,${r() * 0.7})`; g.beginPath(); g.arc(r() * W, r() * H, 1 + r() * 3, 0, 6.3); g.fill(); }
+  g.globalCompositeOperation = 'source-over';
+  return c;
+}
+// Poured basement slab, one 2.5 m tile: aggregate showing through worn cement, trowel swirls,
+// a saw-cut control joint along two edges, hairline cracks with chipped lips, oil and rust stains,
+// damp patches that stay glossy, white salt bloom, grit and dust gathered in the low spots.
+export function concreteFloorTextures(size = 1024, seed = 211) {
+  const r = rng(seed);
+  const n1 = tileNoise(size, 4, 6, r), n2 = tileNoise(size, 96, 2, r), n3 = tileNoise(size, 8, 4, r), n4 = tileNoise(size, 24, 3, r);
+  const [c, g] = mk(size), [b, bg] = mk(size), [rc, rg] = mk(size);
+  const ci = g.createImageData(size, size), bi = bg.createImageData(size, size), ri = rg.createImageData(size, size);
+  const joint = (v) => { const d = Math.min(v, size - v); return d < 2.5 ? 1 - d / 2.5 : 0; };
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x, o = i * 4, a = n1[i], f = n2[i], m = n3[i], q = n4[i];
+    // base cement: grey with a faint warm cast, broad mottling
+    let s = 0.56 + (a - 0.5) * 0.28 + (q - 0.5) * 0.1;
+    // trowel swirls: faint arcs in the finish
+    s += Math.sin((x * 0.021 + Math.sin(y * 0.013 + a * 6) * 4)) * 0.012;
+    // worn areas expose sand and small aggregate as fine speckle
+    const wear = sstep(0.55, 0.8, m);
+    s += (f - 0.5) * (0.06 + wear * 0.22);
+    // damp: darker and glossier in blotches, more toward one side of the tile
+    const damp = sstep(0.58, 0.82, a * 0.7 + q * 0.3);
+    s *= 1 - damp * 0.32;
+    const jn = Math.max(joint(x), joint(y));
+    s *= 1 - jn * 0.6;
+    let R = 152 * s, G = 146 * s, B = 136 * s;
+    // efflorescence: thin white salt where the damp dried
+    const salt = sstep(0.52, 0.58, a * 0.7 + q * 0.3) * (1 - damp) * 0.18;
+    R += salt * 60; G += salt * 60; B += salt * 58;
+    ci.data[o] = R; ci.data[o + 1] = G; ci.data[o + 2] = B; ci.data[o + 3] = 255;
+    bi.data[o] = bi.data[o + 1] = bi.data[o + 2] = 128 + (f - 0.5) * (30 + wear * 70) + (a - 0.5) * 24 - jn * 90; bi.data[o + 3] = 255;
+    ri.data[o] = ri.data[o + 1] = ri.data[o + 2] = Math.min(255, 228 - damp * 150 + (f - 0.5) * 30 + jn * 20); ri.data[o + 3] = 255;
+  }
+  g.putImageData(ci, 0, 0); bg.putImageData(bi, 0, 0); rg.putImageData(ri, 0, 0);
+  // aggregate stones poking through
+  for (let k = 0; k < 1600; k++) {
+    const x = r() * size, y = r() * size, rr = 0.6 + r() * 2.2, t = 100 + r() * 70;
+    g.fillStyle = `rgba(${t},${t - 4},${t - 10},${0.35 + r() * 0.4})`; g.beginPath(); g.ellipse(x, y, rr, rr * (0.6 + r() * 0.4), r() * 3, 0, 6.3); g.fill();
+    bg.fillStyle = 'rgba(175,175,175,0.6)'; bg.beginPath(); bg.arc(x, y, rr * 0.8, 0, 6.3); bg.fill();
+  }
+  // hairline cracks: thin, low contrast, branching, with the odd chipped edge
+  for (let k = 0; k < 6; k++) {
+    const pts = crackPoints(r() * size, r() * size, 120 + r() * 320, r);
+    wrap9(size, (dx, dy) => {
+      g.strokeStyle = 'rgba(40,36,32,0.55)'; g.lineWidth = 0.9; strokePts(g, pts, dx, dy);
+      g.strokeStyle = 'rgba(200,196,186,0.12)'; g.lineWidth = 2.4; strokePts(g, pts, dx + 1, dy + 1);
+      bg.strokeStyle = 'rgb(40,40,40)'; bg.lineWidth = 1.4; strokePts(bg, pts, dx, dy);
+      const mid = pts[Math.floor(pts.length * r())];
+      const br = crackPoints(mid[0], mid[1], 30 + r() * 90, r);
+      g.strokeStyle = 'rgba(40,36,32,0.4)'; g.lineWidth = 0.7; strokePts(g, br, dx, dy);
+      bg.lineWidth = 1; strokePts(bg, br, dx, dy);
+    });
+  }
+  for (let k = 0; k < 10; k++) { const x = r() * size, y = r() * size; blobPath(g, x, y, 3 + r() * 6, r, 0.7, 9); g.fillStyle = 'rgba(70,64,58,0.7)'; g.fill(); blobPath(bg, x, y, 3 + r() * 6, r, 0.7, 9); bg.fillStyle = 'rgb(60,60,60)'; bg.fill(); }
+  // oil and rust stains: soft-edged, slightly glossy
+  for (let k = 0; k < 5; k++) {
+    const x = r() * size, y = r() * size, rad = 30 + r() * 110, oil = r() < 0.6;
+    wrap9(size, (dx, dy) => {
+      const gr = g.createRadialGradient(x + dx, y + dy, rad * 0.2, x + dx, y + dy, rad);
+      gr.addColorStop(0, oil ? 'rgba(24,22,20,0.45)' : 'rgba(110,58,24,0.3)'); gr.addColorStop(0.75, oil ? 'rgba(24,22,20,0.25)' : 'rgba(110,58,24,0.15)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x + dx - rad, y + dy - rad, rad * 2, rad * 2);
+      if (oil) { const rr = rg.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, rad); rr.addColorStop(0, 'rgba(70,70,70,0.7)'); rr.addColorStop(1, 'rgba(70,70,70,0)'); rg.fillStyle = rr; rg.fillRect(x + dx - rad, y + dy - rad, rad * 2, rad * 2); }
+    });
+  }
+  // grit and dust
+  speckle(g, size, 4000, r, ['rgba(40,36,30,0.35)', 'rgba(190,184,170,0.25)', 'rgba(90,80,64,0.3)'], 1.1);
+  return { color: c, bump: b, rough: rc };
+}
+
+// Old striped mattress ticking, yellowed, with sweat and water stains.
+export function mattressTexture(seed = 171) {
+  const r = rng(seed), S = 512;
+  const [c, g] = mk(S);
+  g.fillStyle = '#cfc6ae'; g.fillRect(0, 0, S, S);
+  // woven fabric grain, then the classic blue ticking stripes, then quilting seams
+  for (let y = 0; y < S; y += 2) { g.fillStyle = `rgba(90,80,60,${0.03 + r() * 0.05})`; g.fillRect(0, y, S, 1); }
+  for (let x = 0; x < S; x += 2) { g.fillStyle = `rgba(255,250,235,${r() * 0.05})`; g.fillRect(x, 0, 1, S); }
+  for (let x = 0; x < S; x += 40) { g.fillStyle = 'rgba(58,74,104,0.55)'; g.fillRect(x + 4, 0, 9, S); g.fillStyle = 'rgba(58,74,104,0.4)'; g.fillRect(x + 18, 0, 3, S); g.fillRect(x + 24, 0, 3, S); }
+  g.strokeStyle = 'rgba(60,50,36,0.35)'; g.lineWidth = 2;
+  for (let y = 0; y < S; y += 110) { g.beginPath(); for (let x = 0; x <= S; x += 8) g.lineTo(x, y + 55 + Math.sin(x * 0.06) * 3); g.stroke(); }
+  for (let k = 0; k < 14; k++) {
+    const x = r() * S, y = r() * S, rad = 30 + r() * 110;
+    blobPath(g, x, y, rad, r, 0.5, 16);
+    g.fillStyle = `rgba(150,112,50,${0.08 + r() * 0.12})`; g.fill();
+    g.strokeStyle = 'rgba(110,80,30,0.25)'; g.lineWidth = 2; g.stroke();
+  }
+  // tufting buttons
+  for (let y = 40; y < S; y += 110) for (let x = 40; x < S; x += 110) { g.fillStyle = 'rgba(60,54,44,0.7)'; g.beginPath(); g.arc(x, y, 5, 0, 6.3); g.fill(); }
+  speckle(g, S, 600, r, ['rgba(60,48,30,0.25)'], 1.5);
+  return c;
+}
+// Cobweb sheet for corners: radial threads + sagging rings, alpha only.
+export function cobwebTexture(seed = 181) {
+  const r = rng(seed), S = 256;
+  const [c, g] = mk(S);
+  g.strokeStyle = 'rgba(230,230,225,0.55)'; g.lineWidth = 1;
+  const spokes = 11;
+  for (let k = 0; k < spokes; k++) { const a = (k / spokes) * Math.PI * 0.5; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * S * 1.2, Math.sin(a) * S * 1.2); g.stroke(); }
+  for (let ring = 20; ring < S * 1.1; ring += 14 + r() * 10) {
+    g.beginPath();
+    for (let k = 0; k <= spokes; k++) { const a = (k / spokes) * Math.PI * 0.5, sag = ring * (0.92 + r() * 0.06); const x = Math.cos(a) * sag, y = Math.sin(a) * sag; if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.globalAlpha = 0.25 + r() * 0.4; g.stroke(); g.globalAlpha = 1;
+  }
+  return c;
+}
+
 // ================================================================ portfolio rooms
 // Aged paper with typed lettering. Text always fits: long lines wrap, big words shrink.
 function agedPaper(g, W, H, seed) {
@@ -1507,7 +1752,7 @@ export function createMaterials(renderer) {
   };
   // ---- house interior
   const fb = floorboardTextures(93), ceil = ceilingTextures(512, 37);
-  const cw = cellarTextures(103), cf = cellarTextures(105, 512, true);
+  const cw = cellarTextures(103), cf = concreteFloorTextures();
   const wpMat = (t) => std({ map: tex(t.color), normalMap: tex(heightToNormal(t.bump, 1.6, false), false), roughnessMap: tex(t.rough, false), roughness: 1 });
   // the old corridor surfaces: stained plaster over a gloss dado, worn terrazzo, water-marked ceiling (3 m tiles)
   const cwall = wallTextures(), cfloor = floorTextures();
@@ -1524,7 +1769,7 @@ export function createMaterials(renderer) {
     photos: [0, 1, 2].map((k) => std({ map: tex(photoTexture(k, 99 + k)), roughness: 0.35 })),
     windowView: new THREE.MeshBasicMaterial({ map: tex(windowViewTexture()), color: new THREE.Color(1.5, 1.5, 1.5), fog: false, toneMapped: true }),
     cellarWall: std({ map: tex(cw.color), normalMap: tex(heightToNormal(cw.bump, 2.0), false), roughness: 0.95 }),
-    cellarFloor: std({ map: tex(cf.color), normalMap: tex(heightToNormal(cf.bump, 2.0), false), roughness: 0.9 }),
+    cellarFloor: std({ map: tex(cf.color), normalMap: tex(heightToNormal(cf.bump, 2.4), false), roughnessMap: tex(cf.rough, false), roughness: 1.0 }),
     darkWood: std({ map: tex(woodTexture(107, 512, [76, 52, 34], 3)), roughness: 0.6 }),
     paleWood: std({ map: tex(woodTexture(109, 512, [150, 124, 92], 5)), roughness: 0.75 }),
     cabinet: std({ map: tex(paintTexture([150, 170, 150], 111, 256, { chips: 70, rust: 0.2, grime: 0.9 })), roughness: 0.55 }),

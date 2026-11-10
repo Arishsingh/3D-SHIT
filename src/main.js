@@ -19,12 +19,14 @@ const SLATS = [1.1, 1.31, 1.52, 1.94, 2.15, 2.36, 2.57, 2.7];  // one missing bo
 const SLAT_H = 0.085;
 const SUN = new THREE.Vector3(0.6, 4.6, -62);
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-const DPR = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2) * 0.85;
+const DPR = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2);          // full native sharpness
 
 // ============================================================ renderer
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(DPR);
+let resScale = 1;                       // lowered automatically if the machine can't hold the frame rate
+const PR = () => DPR * resScale;
+renderer.setPixelRatio(PR());
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -639,6 +641,31 @@ for (let i = 0; i < 16; i++) {
 const IN = { x: 300, z: 0, W: 18, D: 14, H: 3 };          // ground floor: x -9..9, z -7..7 (front door at +z)
 const LOOP = { bx: 6.4, bz: 4.4 };                          // the solid block the corridors run round
 const CEL = { x: 300, z: 40, W: 8, D: 7, H: 2.3 };         // cellar: x -4..4, z -3.5..3.5
+// ---- blood decals: thin planes laid on floors and walls (they never block shots or movement)
+const BLOOD = (() => {
+  const T = TX.bloodTextures();
+  const mk = (canvas) => {
+    const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    // low roughness: still wet, so it catches the bulb
+    return new THREE.MeshStandardMaterial({ map: t, transparent: true, depthWrite: false, roughness: 0.55, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  };
+  return { pool: mk(T.pool), splat: mk(T.splat), smear: mk(T.smear), hand: mk(T.hand), drips: mk(T.drips) };
+})();
+function floorBlood(parent, kind, x, z, w, h = w, spin = 0, y = 0.003) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), BLOOD[kind]);
+  m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI / 2, spin, 0); m.position.set(x, y, z);
+  m.receiveShadow = true; m.renderOrder = 2; parent.add(m); return m;
+}
+// a smear trail from (x0,z0) to (x1,z1), heavy end first
+function bloodTrail(parent, x0, z0, x1, z1, width = 0.45) {
+  const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+  return floorBlood(parent, 'smear', (x0 + x1) / 2, (z0 + z1) / 2, len, width, Math.atan2(-dz, dx), 0.0035);
+}
+function wallBlood(parent, kind, x, y, z, ry, w, h = w, tilt = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), BLOOD[kind]);
+  m.position.set(x, y, z); m.rotation.set(0, ry, tilt); m.receiveShadow = true; m.renderOrder = 2; parent.add(m); return m;
+}
+
 const ZONES = { house: IN, cellar: CEL };                  // every walkable interior, by zone name (rooms are added below)
 const INTERIOR = (() => {
   const hg = new THREE.Group(); hg.position.set(IN.x, 0, IN.z); scene.add(hg);
@@ -646,7 +673,7 @@ const INTERIOR = (() => {
   const fp = (g, x, z, w, d, ry = 0, pad = 0.05) => footprint(g.position.x + x, g.position.z + z, w, d, ry, pad);
   const circ = (g, x, z, r) => obstacles.push({ x: g.position.x + x, z: g.position.z + z, r });
   const ao = (g, x, z, len, ry, depth = 0.45) => groundAO(g.position.x + x, g.position.z + z, len, ry, depth);
-  let cellarSwing = null;
+  let cellarSwing = null, cellarChains = [];
   const black = new THREE.MeshBasicMaterial({ color: 0x030303 });
 
   // continuous wallpaper: u runs along the wall in 2 m tiles, v spans floor -> ceiling
@@ -911,6 +938,17 @@ const INTERIOR = (() => {
       mesh(box(0.38, 0.1, 0.02), M.darkWood, { ...o, pos: [0, 0.9, -0.19] });
       circ(g, -8.35, -6.35, 0.32);
     }
+    // blood: something was dragged round the loop toward the cellar door
+    bloodTrail(g, -7.6, 4.2, -7.8, -1.6, 0.5);
+    bloodTrail(g, -7.8, -1.6, -7.2, -5.6, 0.45);
+    bloodTrail(g, -7.2, -5.7, -0.6, -6.1, 0.42);
+    floorBlood(g, 'pool', -7.7, 4.6, 1.3, 1.3, 0.3);
+    floorBlood(g, 'splat', 7.4, -1.4, 1.0, 1.0, 1.2);
+    wallBlood(g, 'hand', -bx - 0.104, 1.3, 2.9, -Math.PI / 2, 0.24, 0.24, 0.2);
+    wallBlood(g, 'hand', -hw + 0.004, 1.15, -3.4, Math.PI / 2, 0.24, 0.24, -0.25);
+    wallBlood(g, 'drips', 0.7, 1.6, -hd + 0.004, 0, 0.5, 1.0);
+    wallBlood(g, 'hand', -0.05, 1.18, -hd + 0.075, 0, 0.22, 0.22, 0.1);                    // on the cellar door itself
+    wallBlood(g, 'splat', -2.3, 1.4, bz + 0.104, 0, 1.0, 1.0);
     // paper, and rubble under two holes in the ceiling
     const corridorPoint = (bias = 0) => {
       const s = corr[Math.floor(R() * 4)], along = s.a0 + 0.6 + R() * (s.a1 - s.a0 - 1.2);
@@ -1013,13 +1051,146 @@ const INTERIOR = (() => {
       mesh(new THREE.TorusGeometry(0.22, 0.015, 6, 20), M.cord, { parent: g, pos: [-2.6, 0.015, 2.0], rot: [Math.PI / 2, 0, 0], kind: 'wood', cast: false });
       circ(g, -2.9, 2.3, 0.32);
     }
-    { // old mattress on the floor
-      const m = mesh(box(0.95, 0.16, 1.9), M.linen, { parent: g, pos: [1.8, 0.08, 1.4], rot: [0, 0.25, 0], kind: 'wood' });
-      mesh(new THREE.CircleGeometry(0.28, 14), new THREE.MeshStandardMaterial({ color: 0x2a1a0e, roughness: 1, transparent: true, opacity: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }), { parent: g, pos: [1.7, 0.161, 1.2], rot: [-Math.PI / 2, 0, 0], cast: false, solid: false });
+    { // old striped mattress on the floor, sagging and lumpy, soaked through on one side
+      const geo = new THREE.BoxGeometry(0.95, 0.2, 1.9, 10, 2, 20), p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        if (y > 0) {
+          const edge = Math.min(0.475 - Math.abs(x), 0.95 - Math.abs(z));                 // soft rounded top edge
+          const round = edge < 0.05 ? (0.05 - edge) * 0.7 : 0;
+          p.setY(i, y - round + Math.sin(x * 11 + z * 7) * 0.004 - Math.exp(-((z + 0.25) ** 2) * 4 - x * x * 6) * 0.025);   // a shallow body-shaped dip
+        }
+      }
+      geo.computeVertexNormals();
+      const mt = new THREE.CanvasTexture(TX.mattressTexture()); mt.colorSpace = THREE.SRGBColorSpace; mt.anisotropy = 8;
+      const mat = new THREE.MeshStandardMaterial({ map: mt, roughness: 0.95 });
+      const mg = new THREE.Group(); mg.position.set(1.8, 0, 1.4); mg.rotation.y = 0.25; g.add(mg);
+      mesh(geo, mat, { parent: mg, pos: [0, 0.1, 0], kind: 'wood' });
+      // a flattened pillow at the head end
+      const pg = new THREE.SphereGeometry(0.5, 16, 8);
+      pg.scale(0.6, 0.12, 0.36);
+      mesh(pg, M.linen, { parent: mg, pos: [0.05, 0.215, 0.66], rot: [0, 0.15, 0], kind: 'wood' });
+      floorBlood(mg, 'pool', -0.08, -0.25, 0.85, 0.85, 0.7, 0.18);
+      wallBlood(mg, 'drips', -0.476, 0.1, -0.3, -Math.PI / 2, 0.25, 0.3);           // run off the side
       fp(g, 1.8, 1.4, 1.0, 1.95, 0.25, 0.0);
     }
+    // ---- blood: a pool by the mattress, a drag trail to the chair, prints on the walls and furnace
+    floorBlood(g, 'pool', 1.15, 1.0, 1.2, 1.2, 1.9);
+    bloodTrail(g, 1.0, 1.15, -2.55, 2.15, 0.5);
+    floorBlood(g, 'splat', -2.9, 2.35, 1.1, 1.1, 0.4);
+    wallBlood(g, 'splat', -3.3, 1.15, hd - 0.004, Math.PI, 1.2, 1.2);
+    wallBlood(g, 'drips', -2.6, 1.55, hd - 0.004, Math.PI, 0.5, 1.0);
+    wallBlood(g, 'drips', -hw + 0.004, 1.5, 2.5, Math.PI / 2, 0.45, 0.9);
+    wallBlood(g, 'hand', hw - 0.004, 1.25, 0.35, -Math.PI / 2, 0.24, 0.24, 0.3);       // grabbed the wall at the foot of the stairs
+    wallBlood(g, 'hand', hw - 0.004, 1.05, 0.75, -Math.PI / 2, 0.24, 0.24, -0.2);
+    wallBlood(g, 'hand', -2.35, 0.95, -hd + 0.6 + 0.456, 0, 0.22, 0.22, 0.15);           // on the furnace door
+    floorBlood(g, 'splat', 3.3, -0.2, 0.6, 0.6, 2.2);
+    // ================================================================ horror dressing
+    {
+      const tex = (canvas) => { const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+      const decal = (canvas, opacity = 1) => new THREE.MeshStandardMaterial({ map: tex(canvas), transparent: true, opacity, depthWrite: false, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+      const plane = (mat, w, h, x, y, z, ry, rx = 0, rz = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y, z); m.rotation.order = 'YXZ'; m.rotation.set(rx, ry, rz); m.receiveShadow = true; m.renderOrder = 2; g.add(m); return m; };
+
+      // GET OUT, daubed across the west wall; tally marks scratched by the chair
+      plane(decal(TX.bloodWritingTexture('GET OUT')), 2.5, 0.94, -hw + 0.006, 1.55, 1.65, Math.PI / 2, 0, -0.03);
+      plane(decal(TX.tallyTexture()), 0.9, 0.45, -1.3, 0.75, hd - 0.006, Math.PI);
+
+      // bloody footprints walking from the chair to the foot of the stairs, fading as the blood ran out
+      const fpTex = tex(TX.footprintTexture());
+      const prints = [0.95, 0.8, 0.65, 0.5, 0.35].map((o) => new THREE.MeshStandardMaterial({ map: fpTex, transparent: true, opacity: o, depthWrite: false, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      { const a = [-2.5, 1.9], b = [3.3, -0.25], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), n = Math.floor(L / 0.36);
+        const yaw = Math.atan2(-dx, -dz), px = -dz / L, pz = dx / L;
+        for (let i = 0; i < n; i++) {
+          const t = i / n, side = i % 2 ? 1 : -1;
+          plane(prints[Math.min(4, Math.floor(t * 5))], 0.13, 0.27, a[0] + dx * t + px * side * 0.11, 0.004, a[1] + dz * t + pz * side * 0.11, yaw, -Math.PI / 2);
+        } }
+
+      // chains with meat hooks hanging from the joists, dripping
+      const link = new THREE.TorusGeometry(0.03, 0.007, 5, 10);
+      const chain = (x, z, len) => {
+        const c = new THREE.Group(); c.position.set(x, H - 0.2, z); g.add(c);
+        const n = Math.floor(len / 0.05);
+        for (let i = 0; i < n; i++) { const l = new THREE.Mesh(link, M.metal); l.position.y = -i * 0.05; l.rotation.y = i % 2 ? Math.PI / 2 : 0; l.castShadow = true; c.add(l); }
+        const hook = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 14, Math.PI * 1.4), M.metal);
+        hook.position.y = -n * 0.05 - 0.06; hook.rotation.z = Math.PI * 0.8; hook.castShadow = true; c.add(hook);
+        mesh(new THREE.SphereGeometry(0.025, 6, 4), new THREE.MeshStandardMaterial({ color: 0x2a0303, roughness: 0.3 }), { parent: c, pos: [0.05, -n * 0.05 - 0.12, 0], solid: false, cast: false });
+        floorBlood(g, 'splat', x + 0.05, z, 0.5, 0.5, x * 3);
+        return c;
+      };
+      const chains = [chain(0.3, 0.1, 1.0), chain(-1.3, 1.1, 0.7), chain(0.9, -1.9, 1.25)];
+
+      // plastic sheeting hung across the corner by the bench, smeared; a tarp-wrapped bundle behind it
+      { const sg = new THREE.PlaneGeometry(1.75, H - 0.25, 18, 10), sp = sg.attributes.position;
+        for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), y = sp.getY(i); sp.setZ(i, Math.sin(x * 7 + y * 1.5) * 0.04 + Math.sin(x * 17) * 0.015 + (y < -0.6 ? (R() - 0.5) * 0.03 : 0)); }
+        sg.computeVertexNormals();
+        const sheet = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0xc9cfc4, transparent: true, opacity: 0.2, roughness: 0.2, side: THREE.DoubleSide, depthWrite: false }));
+        sheet.position.set(3.1, (H - 0.25) / 2 + 0.05, 2.45); sheet.renderOrder = 1; g.add(sheet);
+        // smeared on the side facing the room
+        const sy = -(H - 0.25) / 2 - 0.05;
+        wallBlood(sheet, 'hand', -0.4, 1.2 + sy, -0.075, Math.PI, 0.26, 0.26, 0.3);
+        wallBlood(sheet, 'hand', -0.15, 1.45 + sy, -0.075, Math.PI, 0.26, 0.26, -0.2);
+        wallBlood(sheet, 'smear', 0.2, 1.0 + sy, -0.075, Math.PI, 1.0, 0.26, 0.5);
+        wallBlood(sheet, 'drips', 0.55, 1.6 + sy, -0.075, Math.PI, 0.4, 0.8);
+        wallBlood(sheet, 'splat', -0.1, 0.55 + sy, -0.075, Math.PI, 0.7, 0.7);
+        solidBox(CEL.x + 2.2, CEL.x + hw, CEL.z + 2.4, CEL.z + 2.5);
+        // the bundle: a long shape wrapped in a dark tarp and tied with rope
+        const bg = new THREE.CapsuleGeometry(0.22, 1.2, 6, 12); bg.rotateZ(Math.PI / 2); bg.scale(1, 0.75, 1);
+        const bundle = mesh(bg, new THREE.MeshStandardMaterial({ color: 0x2c3a34, roughness: 0.55 }), { parent: g, pos: [3.0, 0.17, 3.05], rot: [0, 0.12, 0], kind: 'wood' });
+        for (const bx of [-0.45, 0, 0.45]) mesh(new THREE.TorusGeometry(0.2, 0.012, 5, 16), M.cord, { parent: bundle, pos: [bx, 0, 0], rot: [0, Math.PI / 2, 0], solid: false });
+        floorBlood(g, 'pool', 3.1, 3.0, 1.2, 0.9, 0.2);
+        solidBox(CEL.x + 2.2, CEL.x + hw, CEL.z + 2.5, CEL.z + hd); }
+
+      // the bench: a cleaver and a saw left out, bloody rags, a bucket on the floor
+      { const b = new THREE.Group(); b.position.set(0.6, 0.92, hd - 0.4); b.rotation.y = Math.PI; g.add(b);
+        const blade = new THREE.MeshStandardMaterial({ color: 0x8a8c88, metalness: 0.85, roughness: 0.35 });
+        mesh(box(0.22, 0.012, 0.12), blade, { parent: b, pos: [-0.5, 0.01, 0.05], rot: [0, 0.3, 0], kind: 'metal' });
+        mesh(box(0.12, 0.03, 0.035), M.darkWood, { parent: b, pos: [-0.33, 0.015, 0.1], rot: [0, 0.3, 0], kind: 'wood' });
+        mesh(box(0.4, 0.004, 0.09), blade, { parent: b, pos: [0.15, 0.004, -0.15], rot: [0, -0.2, 0], kind: 'metal' });
+        floorBlood(b, 'splat', -0.45, 0.06, 0.5, 0.5, 0.4, 0.013);
+        floorBlood(b, 'smear', 0.1, -0.05, 0.8, 0.25, 0.1, 0.014);
+        for (const [x, z] of [[0.45, 0.15], [0.62, 0.05]]) { const rg = new THREE.SphereGeometry(0.08, 8, 6); rg.scale(1.2, 0.35, 0.9);
+          mesh(rg, new THREE.MeshStandardMaterial({ color: 0x4a0a07, roughness: 0.9 }), { parent: b, pos: [x, 0.02, z], kind: 'wood' }); }
+        wallBlood(g, 'splat', 0.4, 1.45, hd - 0.006, Math.PI, 1.1, 1.1);
+        // bucket with blood in it
+        mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.32, 16, 1, true), M.metal, { parent: g, pos: [-0.75, 0.16, 2.9], kind: 'metal' });
+        mesh(new THREE.CircleGeometry(0.15, 16), new THREE.MeshStandardMaterial({ color: 0x220202, roughness: 0.15 }), { parent: g, pos: [-0.75, 0.26, 2.9], rot: [-Math.PI / 2, 0, 0], solid: false });
+        circ(g, -0.75, 2.9, 0.22); floorBlood(g, 'splat', -0.75, 2.85, 0.6, 0.6, 1.1); }
+
+      // a floor drain in the middle, blood pooled around it
+      mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.01, 16), new THREE.MeshStandardMaterial({ color: 0x1e1d1b, metalness: 0.7, roughness: 0.6 }), { parent: g, pos: [-0.7, 0.005, 1.7], kind: 'metal', cast: false });
+      for (let k = -2; k <= 2; k++) mesh(box(0.2, 0.012, 0.012), M.metal, { parent: g, pos: [-0.7, 0.011, 1.7 + k * 0.04], solid: false, cast: false });
+      floorBlood(g, 'pool', -0.7, 1.7, 0.95, 0.95, 2.6, 0.0025);
+
+      // rope still tied round the chair; blood under it and up the corner
+      { const c = new THREE.Group(); c.position.set(-2.9, 0, 2.3); c.rotation.y = Math.PI * 0.78; g.add(c);
+        for (const y of [0.3, 0.62]) mesh(new THREE.TorusGeometry(0.24, 0.012, 5, 18), M.cord, { parent: c, pos: [0, y, 0], rot: [Math.PI / 2, 0, 0], solid: false });
+        floorBlood(g, 'pool', -2.95, 2.4, 0.9, 0.9, 0.9, 0.0028); }
+
+      // spray up the walls and across the underside of the floor above
+      wallBlood(g, 'splat', -hw + 0.006, 0.9, -0.35 + 1.7, Math.PI / 2, 0.8, 0.8);
+      wallBlood(g, 'hand', -hw + 0.006, 1.0, 0.75, Math.PI / 2, 0.24, 0.24, 0.6);
+      wallBlood(g, 'hand', -hw + 0.006, 0.7, 0.95, Math.PI / 2, 0.24, 0.24, -0.4);
+      wallBlood(g, 'drips', 1.9, 1.45, -hd + 0.006, 0, 0.45, 0.9);
+      for (const [x, z, s] of [[-2.6, 2.0, 1.1], [0.2, 0.3, 0.8], [1.6, 1.2, 0.9]]) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(s, s), BLOOD.splat); m.position.set(x, H - 0.004, z); m.rotation.set(Math.PI / 2, 0, R() * 6); m.renderOrder = 2; g.add(m);
+      }
+      cellarChains = chains;
+    }
+    // ---- cobwebs in the ceiling corners and between joists
+    {
+      const t = new THREE.CanvasTexture(TX.cobwebTexture()); t.colorSpace = THREE.SRGBColorSpace;
+      const web = new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, fog: true });
+      for (const [cx, cz] of [[-1, -1], [1, 1], [-1, 1]]) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), web);
+        m.position.set(cx * (hw - 0.32), H - 0.36, cz * (hd - 0.32));
+        m.rotation.set(0, Math.atan2(-cx, -cz) + Math.PI / 4 * 0, 0);
+        m.lookAt(g.position.x, H - 0.36, g.position.z);                                   // face into the room
+        m.rotateZ(cx * cz > 0 ? Math.PI / 4 * 3 : -Math.PI / 4);
+        g.add(m);
+      }
+    }
     crate(CEL.x - 3.4, CEL.z + 2.9, 0.6, 0.2); crate(CEL.x - 2.75, CEL.z + 3.0, 0.5, -0.3);
-    barrel(CEL.x + 2.6, CEL.z + 3.0, M.barrelBlue); barrel(CEL.x - 0.5, CEL.z + 0.9, M.barrelRust, true);
+    barrel(CEL.x + 1.6, CEL.z - 3.0, M.barrelBlue); barrel(CEL.x - 0.9, CEL.z - 0.7, M.barrelRust, true);
     // the bulb on a pull chain, swinging a little
     const swing = new THREE.Group(); swing.position.set(-0.6, H, 0.5); g.add(swing);
     mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.5, 4), M.cord, { parent: swing, pos: [0, -0.25, 0], cast: false, solid: false });
@@ -1097,7 +1268,7 @@ const INTERIOR = (() => {
   const pool = [L.living, L.kitchen, L.hall, L.lamp];
   L.living.shadow.mapSize.set(512, 512); L.living.shadow.bias = -0.002; L.living.shadow.normalBias = 0.03; L.living.shadow.camera.near = 0.1;
   const cellarBulb = new THREE.Vector3(CEL.x - 0.6, CEL.H - 0.62, CEL.z + 0.5);
-  let zoneNow = null;
+  let zoneNow = null, cellarNextOut = 4, cellarOutUntil = 0;
   const TUBE = 4.4;
   return {
     house: hg, cellar: cg, lights: L, fixtures, rooms, linkTargets,
@@ -1134,8 +1305,14 @@ const INTERIOR = (() => {
         const sw = cellarSwing;
         sw.rotation.z = Math.sin(t * 1.3) * 0.12; sw.rotation.x = Math.sin(t * 0.9 + 1) * 0.06;
         L.living.position.set(cellarBulb.x + Math.sin(sw.rotation.z) * 0.59, cellarBulb.y + 0.02, cellarBulb.z - Math.sin(sw.rotation.x) * 0.59);
-        L.living.intensity = 9 * (0.92 + Math.random() * 0.08);
-        return { hum: 0.45, buzz: 0.25 };
+        // the bulb stutters: mostly steady, now and then it drops out for a moment
+        if (t > cellarNextOut) { cellarOutUntil = t + 0.05 + Math.random() * 0.35; cellarNextOut = t + 3 + Math.random() * 7; }
+        const out = t < cellarOutUntil && Math.random() < 0.7;
+        const k = out ? 0.04 : 0.92 + Math.random() * 0.08;
+        L.living.intensity = 9 * k;
+        sw.children[2].material = out ? M.bulbDead : M.bulb;
+        cellarChains.forEach((c, i) => { c.rotation.z = Math.sin(t * 0.7 + i * 2) * 0.03; c.rotation.x = Math.sin(t * 0.5 + i) * 0.02; });
+        return { hum: 0.45, buzz: out ? 0.9 : 0.25 };
       }
       if (zone.startsWith('room')) return { hum: 0.5, buzz: 0 };
       return { hum: 0, buzz: 0 };
@@ -1593,15 +1770,12 @@ const BodycamShader = {
       vec2 p = uv * 2.0 - 1.0;
       vec2 pg = lens(p, uK, aspect);
       float r2 = dot(p * vec2(aspect, 1.0), p * vec2(aspect, 1.0));
-      float ca = 0.0008 * r2;          // just a hint of colour fringing at the far edges
+      float ca = 0.00025 * r2;         // barely-there colour fringing at the far edges
       vec2 uvR = clamp(lens(p, uK + ca * 2.2, aspect) * 0.5 + 0.5, 0.001, 0.999);
       vec2 uvG = clamp(pg * 0.5 + 0.5, 0.001, 0.999);
       vec2 uvB = clamp(lens(p, uK - ca * 2.2, aspect) * 0.5 + 0.5, 0.001, 0.999);
-      vec2 px = vec2(1.0 / uRes.x, 0.0);
-      vec3 c;
-      c.r = (texture2D(tDiffuse, uvR).r * 2.0 + texture2D(tDiffuse, uvR + px * 1.5).r + texture2D(tDiffuse, uvR - px * 1.5).r) * 0.25;
-      c.g = (texture2D(tDiffuse, uvG).g * 2.0 + texture2D(tDiffuse, uvG + px * 1.5).g + texture2D(tDiffuse, uvG - px * 1.5).g) * 0.25;
-      c.b = (texture2D(tDiffuse, uvB).b * 2.0 + texture2D(tDiffuse, uvB + px * 1.5).b + texture2D(tDiffuse, uvB - px * 1.5).b) * 0.25;
+      // one crisp tap per channel (no horizontal smear)
+      vec3 c = vec3(texture2D(tDiffuse, uvR).r, texture2D(tDiffuse, uvG).g, texture2D(tDiffuse, uvB).b);
       // grade: desaturated, warm, lifted blacks, slight crush in highlights
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, 0.85);
@@ -1616,13 +1790,13 @@ const BodycamShader = {
       // grain (stronger in shadows), animated
       float g = hash(gl_FragCoord.xy + fract(uTime * 7.31) * vec2(311.7, 183.3)) - 0.5;
       float g2 = hash(floor(gl_FragCoord.xy / 2.0) + fract(uTime * 3.7) * 71.0) - 0.5;
-      c += (g * 0.75 + g2 * 0.5) * (0.05 + 0.1 * (1.0 - clamp(l * 3.0, 0.0, 1.0)));
+      c += (g * 0.75 + g2 * 0.3) * (0.03 + 0.06 * (1.0 - clamp(l * 3.0, 0.0, 1.0)));     // fine grain, not mush
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
 
 const composer = new EffectComposer(renderer);
-composer.setPixelRatio(DPR);
+composer.setPixelRatio(PR());
 composer.setSize(innerWidth, innerHeight);
 const volumePass = new SceneVolumePass();
 composer.addPass(volumePass);
@@ -1863,9 +2037,10 @@ function setZone(z) {
   const inside = z !== 'yard';
   sunLight.visible = !inside; sky.visible = !inside;
   scene.background.set(inside ? 0x050505 : 0xc8873e);
-  scene.fog.color.set(inside ? 0x0d0b09 : 0xb97c3c); scene.fog.density = inside ? 0.05 : 0.0105;
+  scene.fog.color.set(inside ? 0x0d0b09 : 0xb97c3c); scene.fog.density = z === 'cellar' ? 0.085 : inside ? 0.05 : 0.0105;   // the cellar air is thick
   scene.environmentIntensity = inside ? 0.08 : 0.6;
-  camera.far = inside ? 40 : 260; camera.updateProjectionMatrix();
+  // far plane just past the walls of wherever you are, so nothing behind them is ever drawn
+  camera.far = z === 'yard' ? 260 : z === 'house' ? 26 : z === 'cellar' ? 14 : 12; camera.updateProjectionMatrix();
   renderer.toneMappingExposure = inside ? 1.2 : 1.0;
   INTERIOR.set(z);
   const Z = ZONES[z] || { x: 0, z: 0 };
@@ -2037,7 +2212,7 @@ function updateWeapon(dt, t, v) {
   camera.fov = THREE.MathUtils.lerp(CAM_FOV, AIM_FOV, A); camera.updateProjectionMatrix();
   weaponCam.fov = THREE.MathUtils.lerp(weaponFovBase, weaponFovBase * 0.9, A); weaponCam.updateProjectionMatrix();
   bodycam.uniforms.uK.value = THREE.MathUtils.lerp(0.06, 0.035, A);
-  dust.uniforms.uScale.value = 0.0065 * (innerHeight * DPR) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  dust.uniforms.uScale.value = 0.0065 * (innerHeight * PR()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   const amp = THREE.MathUtils.smoothstep(v, 0.05, 1.4) * (1 + runT * 0.8) * (1 - 0.7 * A);
   const ph = player.phase;
   const breath = Math.sin(t * 1.4) * 0.0025 * (1 - 0.5 * A);
@@ -2184,12 +2359,7 @@ const hud = (() => {
       const hd = (Math.round(THREE.MathUtils.radToDeg(Math.atan2(-Math.sin(player.yaw), -Math.cos(player.yaw)))) + 360) % 360;
       set(el.hdg, String(hd).padStart(3, '0'));
       // range finder: what is under the reticle (every few frames)
-      if (n++ % 5 === 0) {
-        camera.updateMatrixWorld(); ray.setFromCamera(CENTER, camera);
-        const h = ray.intersectObjects(solids, false).find((h) => !h.object.userData.stalker || stalker.group.visible);
-        distTxt = !h || h.object.userData.sky ? '---' : `${h.distance < 10 ? h.distance.toFixed(1) : Math.round(h.distance)}m`;
-      }
-      set(el.dist, distTxt);
+      // (the range readout is gone from the screen, so no per-frame raycast against the whole scene)
       tog(el.stab, 'on', aimT > 0.5 || Math.hypot(player.vel.x, player.vel.z) < 0.25);
       const d = new Date();
       set(el.date, `${d.getUTCFullYear()}:${p2(d.getUTCMonth() + 1)}:${p2(d.getUTCDate())}`);
@@ -2211,17 +2381,63 @@ function resize() {
   weaponFovBase = w / h < 1 ? 92 : 78;
   weaponCam.fov = weaponFovBase;
   weaponCam.updateProjectionMatrix();
-  bodycam.uniforms.uRes.value.set(w * DPR, h * DPR);
-  const projScale = (h * DPR) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  bodycam.uniforms.uRes.value.set(w * PR(), h * PR());
+  const projScale = (h * PR()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   dust.uniforms.uScale.value = 0.0065 * projScale;
 }
 addEventListener('resize', resize);
 resize();
 
+// ---- smoothness
+// Shadows: the sun's shadow map is re-rendered every other frame (the yard barely moves).
+renderer.shadowMap.autoUpdate = false;
+let frameNo = 0;
+// Adaptive resolution: if frames stay slow for a couple of seconds, render fewer pixels.
+// It only ever steps down (never up and down), so there is no resolution "pumping".
+let slowFor = 0, settleUntil = 0;
+function adaptResolution(rawDt, t) {
+  if (trans || t < settleUntil || !document.hasFocus()) { slowFor = 0; return; }
+  slowFor = rawDt > 1 / 38 ? slowFor + rawDt : Math.max(0, slowFor - rawDt);
+  if (slowFor > 3 && resScale > 0.75) {
+    resScale = Math.max(0.75, +(resScale - 0.125).toFixed(3));
+    renderer.setPixelRatio(PR()); composer.setPixelRatio(PR()); resize();
+    slowFor = 0; settleUntil = t + 3;
+  }
+}
+// Warm-up: compile every shader and upload every texture for the yard, house, cellar and rooms
+// before the first frame, so walking through a door never stalls on a shader compile.
+function warmUp() {
+  const seen = new Set(), hidden = [];
+  const KEYS = ['map', 'normalMap', 'roughnessMap', 'emissiveMap', 'alphaMap', 'bumpMap'];
+  const upload = (root) => root.traverse((o) => {
+    if (!o.isLight && !o.visible) { hidden.push(o); o.visible = true; }       // pooled effects (flash, decals, the figure)
+    for (const m of o.material ? [].concat(o.material) : []) for (const k of KEYS) if (m[k] && !seen.has(m[k])) { seen.add(m[k]); renderer.initTexture(m[k]); }
+  });
+  upload(scene); upload(weaponScene);
+  const save = { pos: player.pos.clone(), yaw: player.yaw, pitch: player.pitch };
+  const room = INTERIOR.rooms[0];
+  const views = [['house', [IN.x - 0.2, IN.z + IN.D / 2 - 0.65], Math.PI / 2], ['cellar', [CEL.x + 3.35, CEL.z + 0.25], 1.9]];
+  if (room) views.push([room.zone, room.inside.at, 0]);
+  views.push(['yard', [save.pos.x, save.pos.z], save.yaw]);
+  for (const [z, at, yaw] of views) {
+    goTo(z, at, yaw);
+    updateCamera(0, 0, 0); camera.updateMatrixWorld();
+    renderer.compile(scene, camera); renderer.compile(weaponScene, weaponCam);
+    renderer.shadowMap.needsUpdate = true;
+    composer.render(0);                                                         // also builds shadow + post-processing programs
+  }
+  for (const o of hidden) o.visible = false;
+  player.pos.copy(save.pos); player.yaw = save.yaw; player.pitch = save.pitch;
+}
+try { warmUp(); } catch (e) { console.warn('warm-up skipped', e); }
+
 let nextAmbient = 10, lastMoving = 0;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 1 / 20);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 1 / 20);
   const t = clock.elapsedTime;
+  adaptResolution(rawDt, t);
+  if ((frameNo++ & 1) === 0 || zone !== 'yard' || trans) renderer.shadowMap.needsUpdate = true;
   const v = updatePlayer(dt, t);
   updateCamera(dt, t, v);
   updateDoors(t);
@@ -2269,7 +2485,7 @@ window.__bodycam = {
       charRot: [character.pivot.rotation.x, character.pivot.rotation.y, character.pivot.rotation.z],
       audio: audio.ctx ? audio.ctx.state : 'none',
       stalker: stalker.group.visible,
-      zone, fy: player.fy, door: nearDoor ? nearDoor.label : null, fading: !!trans,
+      zone, fy: player.fy, res: resScale, door: nearDoor ? nearDoor.label : null, fading: !!trans,
       ready: readyT, hp: game.hp, mag: game.mag, reserve: game.reserve, reloading: game.reloadT > 0, wins: game.wins, losses: game.losses, dist: hud.distance,
     };
   },
