@@ -3,91 +3,71 @@
 // The first entry is the door nearest the front door (to your left as you come in);
 // the rest follow round the loop. Up to 14 rooms.
 //
+//   style     which room it is (see src/roomThemes.js): study workroom workshop plans reception hallway, plus decoys: bedroom bathroom storage trapdoor
 //   door      text on the prompt when you stand at the door ("ENTER  ABOUT")
 //   title     big heading on the far wall of the room
 //   subtitle  smaller line under it
 //   boards    up to 4 framed notices on the side walls: { title, body, link? }
 //             a board with a link opens it in a new tab when you look at it and press Enter
 //
-// Everything below is placeholder text: replace it with your own.
+//
+// The doors are listed in walking order round the loop. Decoy doors (no title, no boards) are plain rooms to wander into.
+
 export const PORTFOLIO = [
   {
-    door: 'ABOUT', title: 'ABOUT', subtitle: 'arishsingh',
+    door: 'INTRODUCTION', style: 'study', title: 'ARISH SINGH', subtitle: 'Automation & Full Stack Developer',
     boards: [
-      { title: 'Hello', body: 'Write a short introduction here: who you are, what you make, and what you are looking for.' },
-      { title: 'Now', body: 'What you are working on or learning at the moment.' },
-      { title: 'Elsewhere', body: 'Your GitHub profile.', link: 'https://github.com/' },
+      { title: 'Hello', body: 'I build scalable backends, automation and clean, modern interfaces. I learn by building things from scratch, breaking them and shipping again.' },
+      { title: 'Now', body: 'Automation and Full Stack Developer at Neurix.dev (remote). Also Marketing Head at Cyber Unbound, Bangalore.' },
+      { title: 'Proof', body: '$3K+ earned freelancing over the last 6 months. A creative developer who never stops moving.' },
+      { title: 'Website', body: 'The full portfolio, blog and resume.', link: 'https://arishsingh.site' },
+    ],
+  },
+  { door: 'OPEN DOOR', style: 'bedroom' },
+  {
+    door: 'PROJECTS', style: 'workroom', title: 'PROJECTS', subtitle: 'Things I have built',
+    boards: [
+      { title: 'Croma', body: 'Chrome extension that explains selected code, catches console errors and watches slow API calls. JavaScript, AI.', link: 'https://croma-nine.vercel.app' },
+      { title: 'Immortal', body: 'Horror survival game about being watched. No checkpoints, no second chances. React, Vite.', link: 'https://immortal-game.vercel.app/' },
+      { title: 'Neurix Studio', body: 'Software and the story around it: web, mobile and automation. Three.js, WebGL.', link: 'https://www.neurixstudio.in' },
+      { title: 'Ariena', body: 'Studio platform for original games, films and short stories. Next.js, TypeScript.', link: 'https://ariena.vercel.app/' },
+    ],
+  },
+  { door: 'OPEN DOOR', style: 'bathroom' },
+  {
+    door: 'SKILLS', style: 'workshop', title: 'SKILLS', subtitle: 'What I work with',
+    boards: [
+      { title: 'Languages', body: 'JavaScript, TypeScript, Python, Java, Go, HTML and CSS.' },
+      { title: 'Frontend', body: 'React, Next.js, Tailwind, shadcn/ui, Redux, Three.js, WebGL, Vite.' },
+      { title: 'Backend & data', body: 'Node.js, Express, FastAPI, PostgreSQL, MongoDB, MySQL, Redis, Supabase, Prisma.' },
+      { title: 'Automation & cloud', body: 'n8n, OpenAI, Docker, Kubernetes, AWS, Vercel, GitHub Actions.' },
+    ],
+  },
+  { door: 'OPEN DOOR', style: 'storage' },
+  {
+    door: 'UPCOMING PLANS', style: 'plans', title: 'UPCOMING PLANS',
+    boards: [
+      { title: 'ECLIPSE Protocol', body: 'The next thing from Ariena. Coming soon.', link: 'https://ariena.vercel.app/' },
+      { title: 'More worlds', body: 'Original games, films and short stories under Ariena.' },
+      { title: 'Keep shipping', body: 'More AI dev tools and automation, in the spirit of Croma, Velocity and Nexa.' },
+      { title: 'Writing', body: 'More write-ups on how each project is built.', link: 'https://dev.to/arishsingh99' },
+    ],
+  },
+  { door: 'OPEN DOOR', style: 'trapdoor' },
+  {
+    door: 'CONTACTS', style: 'reception', title: 'CONTACTS', subtitle: 'Say hello',
+    // shown as wooden signposts standing in the room (look at one, press Enter)
+    signs: [
+      { label: 'GITHUB', sub: 'Arishsingh', link: 'https://github.com/Arishsingh' },
+      { label: 'LINKEDIN', sub: 'in/arishsingh', link: 'https://www.linkedin.com/in/arishsingh/' },
+      { label: 'MESSAGE', sub: 'arishsingh9469@gmail.com', link: 'mailto:arishsingh9469@gmail.com' },
+      { label: 'X', sub: '@itz_Arishsingh', link: 'https://x.com/itz_Arishsingh' },
     ],
   },
   {
-    door: 'PROJECT 01', title: 'PROJECT 01', subtitle: 'Project name',
+    door: 'BYE', style: 'hallway', title: 'BYE', subtitle: 'Thanks for visiting',
     boards: [
-      { title: 'What it is', body: 'One or two lines describing the project and the problem it solves.' },
-      { title: 'How', body: 'Stack, tools and the interesting technical decisions.' },
-      { title: 'Result', body: 'Numbers, users, outcome, or what you learned.' },
-      { title: 'Source', body: 'Link to the repository or a live demo.', link: 'https://github.com/' },
-    ],
-  },
-  {
-    door: 'PROJECT 02', title: 'PROJECT 02', subtitle: 'Project name',
-    boards: [
-      { title: 'What it is', body: 'One or two lines describing the project.' },
-      { title: 'How', body: 'Stack, tools and the interesting technical decisions.' },
-      { title: 'Source', body: 'Link to the repository or a live demo.', link: 'https://github.com/' },
-    ],
-  },
-  {
-    door: 'PROJECT 03', title: 'PROJECT 03', subtitle: 'Project name',
-    boards: [
-      { title: 'What it is', body: 'One or two lines describing the project.' },
-      { title: 'How', body: 'Stack, tools and the interesting technical decisions.' },
-      { title: 'Source', body: 'Link to the repository or a live demo.', link: 'https://github.com/' },
-    ],
-  },
-  {
-    door: 'PROJECT 04', title: 'PROJECT 04', subtitle: 'Project name',
-    boards: [
-      { title: 'What it is', body: 'One or two lines describing the project.' },
-      { title: 'How', body: 'Stack, tools and the interesting technical decisions.' },
-      { title: 'Source', body: 'Link to the repository or a live demo.', link: 'https://github.com/' },
-    ],
-  },
-  {
-    door: 'SKILLS', title: 'SKILLS', subtitle: 'What I work with',
-    boards: [
-      { title: 'Languages', body: 'List your languages here.' },
-      { title: 'Frameworks', body: 'List frameworks and libraries here.' },
-      { title: 'Tools', body: 'Editors, build tools, cloud, design tools.' },
-      { title: 'Also', body: 'Anything else you are good at.' },
-    ],
-  },
-  {
-    door: 'EXPERIENCE', title: 'EXPERIENCE', subtitle: 'Where I have worked',
-    boards: [
-      { title: 'Role, Company', body: 'Dates. What you did and what changed because of it.' },
-      { title: 'Role, Company', body: 'Dates. What you did and what changed because of it.' },
-    ],
-  },
-  {
-    door: 'EDUCATION', title: 'EDUCATION', subtitle: 'Study and courses',
-    boards: [
-      { title: 'School / University', body: 'Course, years, anything notable.' },
-      { title: 'Certificates', body: 'Courses and certifications.' },
-    ],
-  },
-  {
-    door: 'ACHIEVEMENTS', title: 'ACHIEVEMENTS', subtitle: 'Awards, talks, wins',
-    boards: [
-      { title: 'Achievement', body: 'What it was and when.' },
-      { title: 'Achievement', body: 'What it was and when.' },
-    ],
-  },
-  {
-    door: 'CONTACT', title: 'CONTACT', subtitle: 'Get in touch',
-    boards: [
-      { title: 'Email', body: 'Your email address.' },
-      { title: 'GitHub', body: 'Your GitHub profile.', link: 'https://github.com/' },
-      { title: 'LinkedIn', body: 'Your LinkedIn profile.', link: 'https://www.linkedin.com/' },
+      { title: 'See you', body: 'Thanks for walking through. Come back any time, the doors stay open.', link: 'https://arishsingh.site' },
     ],
   },
 ];

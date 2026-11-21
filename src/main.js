@@ -9,6 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as TX from './textures.js';
 import { AudioEngine } from './audio.js';
 import { PORTFOLIO } from './portfolio.js';
+import { THEMES } from './roomThemes.js';
 
 // ============================================================ constants
 const HALL = { x0: -1.5, x1: 1.5, h: 3, z0: 0, z1: -40 };
@@ -35,8 +36,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xc8873e);
-scene.fog = new THREE.FogExp2(0xb97c3c, 0.0105);          // warm sunset haze
+scene.background = new THREE.Color(0x0b1016);
+scene.fog = new THREE.FogExp2(0x16212c, 0.02);          // warm sunset haze
 
 const camera = new THREE.PerspectiveCamera(88, innerWidth / innerHeight, 0.05, 260);
 camera.rotation.order = 'YXZ';
@@ -83,9 +84,9 @@ function crate(x, z, s, ry, y = 0) {
 // ============================================================ level: an overcast yard around an old clapboard house
 // Original layout. Origin = middle of the yard, the house sits to the north (-z),
 // you spawn to the south looking at it.
-const LEVEL = { spawn: [0, 12], bounds: 23.4, fence: 24 };   // a picket fence encloses the yard
 const boxes = [];                                   // axis-aligned collision boxes
 const solidBox = (x0, x1, z0, z1) => boxes.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
+const LEVEL = { spawn: [0, 22], spawnPitch: -0.01, bounds: 23.4, fence: 24 };   // a picket fence encloses the yard
 // world-space AABB of a rotated w x d footprint
 const footprint = (x, z, w, d, ry, pad = 0) => {
   const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry)), hx = (w * c + d * s) / 2 + pad, hz = (w * s + d * c) / 2 + pad;
@@ -108,19 +109,19 @@ const skyMat = new THREE.ShaderMaterial({
       vec2 uv = vDir.xz / (max(y, 0.0) + 0.18) * 0.9 + vec2(uTime * 0.004, uTime * 0.0015);
       float cl = fbm(uv) * 0.7 + fbm(uv * 3.1) * 0.3;
       // sunset: gold at the horizon, amber above, dusky violet overhead; brightest toward the low sun
-      vec3 L = normalize(vec3(-0.85, 0.16, -0.5));
+      vec3 L = normalize(vec3(-0.6, 0.45, -0.5));
       float sd = max(dot(normalize(vDir), L), 0.0);
       float yy = clamp(y, 0.0, 1.0);
-      vec3 horizon = vec3(1.0, 0.66, 0.2), mid = vec3(0.95, 0.5, 0.2), zenith = vec3(0.42, 0.3, 0.36);
+      vec3 horizon = vec3(0.13, 0.16, 0.21), mid = vec3(0.06, 0.08, 0.12), zenith = vec3(0.012, 0.018, 0.035);
       vec3 col = mix(horizon, mid, smoothstep(0.0, 0.22, yy));
       col = mix(col, zenith, smoothstep(0.15, 0.85, yy));
-      col += vec3(1.0, 0.62, 0.18) * pow(sd, 6.0) * 0.45 + vec3(1.0, 0.82, 0.45) * pow(sd, 60.0) * 0.6;
+      col += vec3(0.45, 0.55, 0.7) * pow(sd, 8.0) * 0.14 + vec3(0.7, 0.8, 0.95) * pow(sd, 120.0) * 0.25;
       // clouds: dark bellies away from the sun, edges lit gold toward it
       float lit = 0.6 + 0.6 * pow(sd, 3.0);
       col = mix(col * (0.7 + 0.25 * cl), col * (0.85 + 0.5 * cl) * lit, cl);
-      col += vec3(1.0, 0.92, 0.7) * smoothstep(0.9993, 0.9997, sd) * 2.5;     // the sun itself, low and soft
-      col = mix(col, vec3(0.8, 0.52, 0.26), smoothstep(0.04, -0.12, y));
-      gl_FragColor = vec4(col * 0.95, 1.0);
+      col += vec3(0.85, 0.92, 1.0) * smoothstep(0.9985, 0.9990, sd) * 2.2;     // a pale, cold moon
+      col = mix(col, vec3(0.05, 0.065, 0.08), smoothstep(0.04, -0.12, y));
+      gl_FragColor = vec4(col * 0.9, 1.0);
     }`,
 });
 const sky = new THREE.Mesh(new THREE.SphereGeometry(180, 32, 16), skyMat);
@@ -129,6 +130,7 @@ sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
 // ---- ground: dead grass everywhere, a muddy gravel yard in the middle fading into it
 mesh(scaleUV(new THREE.PlaneGeometry(360, 360), 120, 120), M.grass, { rot: [-Math.PI / 2, 0, 0], cast: false });
 mesh(new THREE.PlaneGeometry(52, 52), M.mud, { pos: [0, 0.012, 0], rot: [-Math.PI / 2, 0, 0], cast: false }).renderOrder = 0;
+
 
 // soft contact shadow where a wall meets the ground
 const AO_TEX = new THREE.CanvasTexture(TX.aoGradientTexture(true));
@@ -1208,8 +1210,10 @@ const INTERIOR = (() => {
     const name = 'room' + i;
     ZONES[name] = Z;
     const g = new THREE.Group(); g.position.set(Z.x, 0, Z.z); scene.add(g);
-    const { W, D, H } = Z, hw = W / 2, hd = D / 2, T = 3, wm = M.wall;
-    mesh(scaleUV(new THREE.PlaneGeometry(W, D), W / T, D / T), M.floor, { parent: g, rot: [-Math.PI / 2, 0, 0], cast: false, kind: 'hard' });
+    const th = THEMES[sec.style];                                       // each room has its own look (src/roomThemes.js)
+    const tint = (mat, c) => { if (!th || !c || !mat || !mat.isMaterial) return mat; const m = mat.clone(); m.color.multiply(new THREE.Color(c)); return m; };
+    const { W, D, H } = Z, hw = W / 2, hd = D / 2, T = 3, wm = tint(M.wall, th && th.wall);
+    mesh(scaleUV(new THREE.PlaneGeometry(W, D), W / T, D / T), (th && th.floorKey && M[th.floorKey]) || M.floor, { parent: g, rot: [-Math.PI / 2, 0, 0], cast: false, kind: 'hard' });
     mesh(scaleUV(new THREE.PlaneGeometry(W, D), W / T, D / T), M.ceiling, { parent: g, pos: [0, H, 0], rot: [Math.PI / 2, 0, 0], kind: 'hard' });
     wall(g, H, -hw - 0.1, hd + 0.1, hw + 0.1, hd + 0.1, wm, [], 0.2, T);
     wall(g, H, -hw - 0.1, -hd - 0.1, hw + 0.1, -hd - 0.1, wm, [], 0.2, T);
@@ -1222,24 +1226,26 @@ const INTERIOR = (() => {
     mesh(box(0.3, 0.07, 1.3), M.metal, { parent: f, pos: [0, -0.04, 0], kind: 'metal', cast: false });
     for (const tx of [-0.07, 0.07]) mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.2, 8), M.tube, { parent: f, pos: [tx, -0.1, 0], rot: [Math.PI / 2, 0, 0], solid: false, cast: false });
     // framed boards: the title on the far wall, notices on the side walls
-    const frame = (x, y, z, ry, w, h, canvas, link) => {
+    const frame = (x, y, z, ry, w, h, canvas, link, glow = 0.22) => {
       const q = new THREE.Group(); q.position.set(x, y, z); q.rotation.y = ry; g.add(q);
       mesh(box(w + 0.1, h + 0.1, 0.04), M.darkWood, { parent: q, pos: [0, 0, 0.02], kind: 'wood' });
       const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-      const mat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22 });
+      const mat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: glow });
       const panel = mesh(new THREE.PlaneGeometry(w, h), mat, { parent: q, pos: [0, 0, 0.042], kind: 'paper', cast: false });
       for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.015, 6, 4), M.metal, { parent: q, pos: [sx * (w / 2 - 0.06), h / 2 - 0.06, 0.05], solid: false, cast: false });   // pins
       if (link) { panel.userData.link = link; linkTargets.push(panel); }
       return panel;
     };
-    frame(0, 1.65, -hd + 0.005, 0, 3.4, 1.7, TX.titleBoardTexture(sec.title, sec.subtitle, 141 + i));
+    const tb = (th && th.titleBox) || { w: 3.4, h: 1.7, y: 1.65 }, gl = th ? 0.07 : 0.22;     // themed rooms: smaller, less glowing boards (they read as real objects)
+    if (!th || th.title === 'paper') frame(0, tb.y, -hd + 0.005, 0, tb.w, tb.h, TX.titleBoardTexture(sec.title, sec.subtitle, 141 + i), null, gl);
+    else if (th.title) frame(0, tb.y, -hd + 0.005, 0, tb.w, tb.h, th.title(sec), null, gl);        // cork board, whiteboard, pegboard ...
     const spots = [[-hw + 0.005, -0.9, Math.PI / 2], [hw - 0.005, -0.9, -Math.PI / 2], [-hw + 0.005, 1.2, Math.PI / 2], [hw - 0.005, 1.2, -Math.PI / 2]];
     (sec.boards || []).slice(0, 4).forEach((b, k) => {
       const [x, z, ry] = spots[k];
-      frame(x, 1.55, z, ry, 1.5, 1.125, TX.noticeTexture(b, 151 + i * 7 + k), b.link);
+      frame(x, 1.55, z, ry, 1.5, 1.125, TX.noticeTexture(b, 151 + i * 7 + k), b.link, th ? 0.07 : 0.22);
     });
-    // a little life: a chair, loose paper, a crate in a corner
-    {
+    // a little life: a chair, loose paper, a crate in a corner (themed rooms bring their own set pieces)
+    if (!th) {
       const c = new THREE.Group(); c.position.set(hw - 0.7, 0, hd - 0.8); c.rotation.y = -2.4; g.add(c);
       const o = { parent: c, kind: 'wood' };
       mesh(box(0.42, 0.04, 0.42), M.darkWood, { ...o, pos: [0, 0.46, 0] });
@@ -1249,10 +1255,12 @@ const INTERIOR = (() => {
       circ(g, hw - 0.7, hd - 0.8, 0.32);
     }
     for (let k = 0; k < 6; k++) mesh(new THREE.PlaneGeometry(0.21, 0.28), M.paper[k % 4], { parent: g, pos: [(R() - 0.5) * (W - 1.2), 0.004 + k * 0.0002, (R() - 0.5) * (D - 1.2)], rot: [-Math.PI / 2, 0, R() * 6], kind: 'paper', cast: false });
-    crate(Z.x - hw + 0.45, Z.z + hd - 0.45, 0.55, 0.3);
+    if (!th) crate(Z.x - hw + 0.45, Z.z + hd - 0.45, 0.55, 0.3);
+    const built = th && th.build({ g, mesh, box, circ: (x, z, r) => circ(g, x, z, r), M, hw, hd, sec, addLink: (m, url) => { m.userData.link = url; linkTargets.push(m); } });
     const d = roomDoors[i];
     rooms.push({
       zone: name, title: sec.title, label: sec.door || sec.title,
+      lightColor: th ? th.light : 0xffc98e, fillColor: th ? th.fill : 0xffd6a0, lightK: th ? th.lightK : 1, anim: built && built.anim,
       // corridor side: stand in front of the door; room side: just inside the room's door
       outside: { x: d.x, z: d.z, at: [d.x + Math.sin(d.ry) * 0.9, d.z + Math.cos(d.ry) * 0.9], yaw: d.ry + Math.PI },
       inside: { x: Z.x, z: Z.z + hd, at: [Z.x, Z.z + hd - 0.8], yaw: 0 },
@@ -1269,18 +1277,19 @@ const INTERIOR = (() => {
   L.living.shadow.mapSize.set(512, 512); L.living.shadow.bias = -0.002; L.living.shadow.normalBias = 0.03; L.living.shadow.camera.near = 0.1;
   const cellarBulb = new THREE.Vector3(CEL.x - 0.6, CEL.H - 0.62, CEL.z + 0.5);
   let zoneNow = null, cellarNextOut = 4, cellarOutUntil = 0;
-  const TUBE = 4.4;
+  const TUBE = 2.2;
   return {
     house: hg, cellar: cg, lights: L, fixtures, rooms, linkTargets,
     set(zone) {
       zoneNow = zone;
+      L.living.color.set(0xffc98e); L.kitchen.color.set(0xffd6a0);          // corridor defaults (rooms recolour them below)
       const on = zone !== 'yard';
       for (const l of pool) { l.visible = on; l.intensity = 0; l.distance = zone === 'cellar' ? 11 : 9; l.decay = zone === 'cellar' ? 1.7 : 2; }
-      sun.visible = zone === 'house'; sun.intensity = zone === 'house' ? 2.6 : 0;
+      sun.visible = zone === 'house'; sun.intensity = zone === 'house' ? 1.3 : 0;
       L.living.castShadow = zone === 'cellar' && !IS_TOUCH;
-      if (zone === 'cellar') { L.living.position.copy(cellarBulb); L.kitchen.position.set(CEL.x + 3.5, CEL.H - 0.1, CEL.z - 3.4); L.living.intensity = 9; L.kitchen.intensity = 0.9; }
+      if (zone === 'cellar') { L.living.position.copy(cellarBulb); L.kitchen.position.set(CEL.x + 3.5, CEL.H - 0.1, CEL.z - 3.4); L.living.intensity = 6; L.kitchen.intensity = 0.6; }
       const room = rooms.find((r) => r.zone === zone);
-      if (room) { L.living.position.copy(room.light); L.living.intensity = 5.5; L.kitchen.position.copy(room.board); L.kitchen.intensity = 2.2; }
+      if (room) { L.living.position.copy(room.light); L.living.intensity = 3.2 * room.lightK; L.kitchen.position.copy(room.board); L.kitchen.intensity = 1.2 * room.lightK; L.living.color.set(room.lightColor); L.kitchen.color.set(room.fillColor); }
     },
     // returns the electrical hum/buzz for the audio engine
     update(t, zone, camPos) {
@@ -1309,12 +1318,17 @@ const INTERIOR = (() => {
         if (t > cellarNextOut) { cellarOutUntil = t + 0.05 + Math.random() * 0.35; cellarNextOut = t + 3 + Math.random() * 7; }
         const out = t < cellarOutUntil && Math.random() < 0.7;
         const k = out ? 0.04 : 0.92 + Math.random() * 0.08;
-        L.living.intensity = 9 * k;
+        L.living.intensity = 6 * k;
         sw.children[2].material = out ? M.bulbDead : M.bulb;
         cellarChains.forEach((c, i) => { c.rotation.z = Math.sin(t * 0.7 + i * 2) * 0.03; c.rotation.x = Math.sin(t * 0.5 + i) * 0.02; });
         return { hum: 0.45, buzz: out ? 0.9 : 0.25 };
       }
-      if (zone.startsWith('room')) return { hum: 0.5, buzz: 0 };
+      if (zone.startsWith('room')) {
+        const room = rooms.find((r) => r.zone === zone);
+        const m = room && room.anim ? room.anim(t) : undefined;           // animated set pieces; may also flicker the light
+        if (room && m !== undefined) { L.living.intensity = 3.2 * room.lightK * m; return { hum: 0.5, buzz: m < 0.5 ? 0.8 : 0 }; }
+        return { hum: 0.5, buzz: 0 };
+      }
       return { hum: 0, buzz: 0 };
     },
   };
@@ -1328,10 +1342,10 @@ function std2(base, opacity) {
 }
 
 // ============================================================ lights: overcast daylight
-const hemi = new THREE.HemisphereLight(0xd8b088, 0x4c3a28, 1.3);
+const hemi = new THREE.HemisphereLight(0x3a4a62, 0x0c0e12, 1.3);
 scene.add(hemi);
-const sunLight = new THREE.DirectionalLight(0xffb468, 1.6);      // low sunset sun from the west: warm, long shadows
-sunLight.position.set(-34, 9, -20);
+const sunLight = new THREE.DirectionalLight(0x8fa8d0, 1.9);      // cold moonlight: pale, long shadows
+sunLight.position.set(-24, 26, -14);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
 Object.assign(sunLight.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 90 });
@@ -1600,12 +1614,12 @@ function createPistol() {
   add(box(0.03, 0.012, 0.05), poly, [0, -0.104, 0.064], [-0.3, 0, 0]);                 // mag base
   add(box(0.006, 0.004, 0.045), poly, [0, -0.022, -0.03]);                              // trigger guard
   add(box(0.006, 0.03, 0.005), poly, [0, -0.008, -0.052]);
-  add(box(0.004, 0.018, 0.004), steel, [0, -0.008, -0.022], [0.25, 0, 0]);              // trigger
+  const trigger = add(box(0.004, 0.018, 0.004), steel, [0, -0.008, -0.022], [0.25, 0, 0]);   // trigger
   void grip;
 
   const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.036, -0.13); root.add(muzzle);
   const port = new THREE.Object3D(); port.position.set(0.02, 0.048, -0.005); root.add(port);
-  return { root, slide, muzzle, port };
+  return { root, slide, muzzle, port, trigger };
 }
 
 function createHands() {
@@ -1647,27 +1661,40 @@ function createHands() {
     finger(grip, [[-0.034, y, -0.006], [-0.03, y, -0.045], [0.012, y - 0.001, -0.048], [0.034, y - 0.002, -0.03]], 0.0087 * k);
   }
 
-  // index finger straight along the frame, last joint curled onto the trigger
-  finger(g, [[0.021, -0.006, 0.024], [0.0225, -0.004, -0.006], [0.017, -0.006, -0.02], [0.004, -0.011, -0.024]], 0.0082);
+  // index finger straight along the frame, last joint curled onto the trigger.
+  // The first segment is fixed; the rest hangs from the knuckle so it can squeeze when you fire.
+  finger(g, [[0.021, -0.006, 0.024], [0.0225, -0.004, -0.006]], 0.0082);
+  const triggerFinger = new THREE.Group(); triggerFinger.position.set(0.0225, -0.004, -0.006); g.add(triggerFinger);
+  finger(triggerFinger, [[0, 0, 0], [-0.0055, -0.002, -0.014], [-0.0185, -0.007, -0.018]], 0.0078);
   // right thumb rides the left side of the frame; support thumb points forward beneath it
   finger(g, [[-0.006, -0.002, 0.07], [-0.02, 0.002, 0.04], [-0.021, 0.004, 0.012]], 0.0092);
   finger(g, [[-0.03, -0.03, 0.05], [-0.025, -0.017, 0.02], [-0.022, -0.014, -0.012]], 0.0094);
 
-  // wrists, forearms, sleeves (spread into a V like an extended two-hand grip)
-  cap(g, [0.012, -0.05, 0.082], [0.016, -0.08, 0.11], 0.021);
-  cap(g, [-0.03, -0.062, 0.07], [-0.038, -0.092, 0.1], 0.022);
-  cap(g, [0.016, -0.08, 0.11], [0.2, -0.19, 0.43], 0.025);
-  cap(g, [-0.038, -0.092, 0.1], [-0.22, -0.2, 0.42], 0.026);
-  cap(g, [0.085, -0.122, 0.235], [0.26, -0.24, 0.6], 0.04, sleeve);
-  cap(g, [-0.105, -0.13, 0.225], [-0.28, -0.25, 0.59], 0.041, sleeve);
-  cap(g, [0.082, -0.12, 0.228], [0.09, -0.125, 0.24], 0.031, cuff);
-  cap(g, [-0.102, -0.128, 0.218], [-0.11, -0.133, 0.23], 0.032, cuff);
+  // wrists, forearms, sleeves (spread into a V like an extended two-hand grip).
+  // They hang from a pivot at the wrists so they can lag behind the gun like real arms do.
+  const arms = new THREE.Group(); const P = [0, -0.07, 0.09]; arms.position.set(...P); g.add(arms);
+  const q = (a) => [a[0] - P[0], a[1] - P[1], a[2] - P[2]];
+  const lc = (a, b, r, mat) => cap(arms, q(a), q(b), r, mat);
+  lc([0.012, -0.05, 0.082], [0.016, -0.08, 0.11], 0.021);
+  lc([-0.03, -0.062, 0.07], [-0.038, -0.092, 0.1], 0.022);
+  lc([0.016, -0.08, 0.11], [0.2, -0.19, 0.43], 0.025);
+  lc([-0.038, -0.092, 0.1], [-0.22, -0.2, 0.42], 0.026);
+  lc([0.085, -0.122, 0.235], [0.26, -0.24, 0.6], 0.04, sleeve);
+  lc([-0.105, -0.13, 0.225], [-0.28, -0.25, 0.59], 0.041, sleeve);
+  lc([0.082, -0.12, 0.228], [0.09, -0.125, 0.24], 0.031, cuff);
+  lc([-0.102, -0.128, 0.218], [-0.11, -0.133, 0.23], 0.032, cuff);
+  // glove cuffs / wrist straps and a knuckle plate so the hands read as real tactical gloves
+  lc([0.013, -0.056, 0.086], [0.0145, -0.066, 0.097], 0.0235, cuff);
+  lc([-0.032, -0.068, 0.076], [-0.035, -0.078, 0.088], 0.0245, cuff);
+  g.userData = { arms, triggerFinger };
   return g;
 }
 
 const gun = createPistol();
 const rig = new THREE.Group();          // sway / bob / recoil node
-rig.add(gun.root, createHands());
+const handsRig = createHands();
+const { arms: armsRig, triggerFinger } = handsRig.userData;
+rig.add(gun.root, handsRig);
 weaponScene.add(rig);
 
 const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(TX.flashTexture()), color: new THREE.Color(5, 3.6, 2.2), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
@@ -1811,13 +1838,16 @@ composer.addPass(bodycam);
 const clock = new THREE.Clock();
 const keys = {};
 const player = {
-  pos: new THREE.Vector3(0, 0, 12), vel: new THREE.Vector3(),
-  yaw: 0, pitch: -0.03, phase: 0, stepIdx: 0,
+  pos: new THREE.Vector3(LEVEL.spawn[0], 0, LEVEL.spawn[1]), vel: new THREE.Vector3(),
+  yaw: 0, pitch: LEVEL.spawnPitch, phase: 0, stepIdx: 0,
   fy: 0,                                // floor height under you (porch, steps)
 };
 let zone = 'yard';                      // 'yard' | 'house' | 'cellar'
 const kick = new Spring(140, 15), kickYaw = new Spring(120, 14), stepJolt = new Spring(180, 16);
 const swayX = new Spring(90, 11), swayY = new Spring(90, 11);
+const armP = new Spring(55, 7), armY = new Spring(55, 7), armR = new Spring(50, 6);       // forearms lag behind the gun
+const leanF = new Spring(38, 8), leanR = new Spring(38, 8);                                 // body lean when speeding up / stopping
+const accel3 = { f: 0, r: 0 };
 const recoilZ = new Spring(320, 24), recoilP = new Spring(260, 19);
 let started = false, locked = false, dragMode = IS_TOUCH, holstered = false, holsterT = 0;
 // aim down sights (hold Space): 0 = hip, 1 = fully aimed
@@ -1848,7 +1878,7 @@ function damage(n) {
     hud.banner(false, clock.elapsedTime);
     Object.assign(game, { hp: 100, mag: MAG_SIZE, reserve: MAG_SIZE * 4, reloadT: 0 });
     if (zone !== 'yard') setZone('yard');
-    player.pos.set(SPAWN[0], 0, SPAWN[1]); player.vel.set(0, 0, 0); player.yaw = 0; player.pitch = -0.03; player.fy = 0;
+    player.pos.set(SPAWN[0], 0, SPAWN[1]); player.vel.set(0, 0, 0); player.yaw = 0; player.pitch = LEVEL.spawnPitch; player.fy = 0;
   }
 }
 
@@ -2001,9 +2031,6 @@ let tearUntil = 0, nextTear = 3;
 // screen glitches are switched off: the picture stays clean
 function triggerTear() {}
 
-// attract-mode patrol
-const patrol = [[0, 6], [6, 0.5], [3.5, -2.0], [-4, -1.2], [-11, 5.5], [-3, 11], [10, 7], [15, -1]].map(([x, z]) => new THREE.Vector2(x, z));
-let patrolIdx = 0;
 const angleDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
 
 // ============================================================ doors: walk up, press Enter, cut to black, come out somewhere else
@@ -2036,12 +2063,12 @@ function setZone(z) {
   zone = z;
   const inside = z !== 'yard';
   sunLight.visible = !inside; sky.visible = !inside;
-  scene.background.set(inside ? 0x050505 : 0xc8873e);
-  scene.fog.color.set(inside ? 0x0d0b09 : 0xb97c3c); scene.fog.density = z === 'cellar' ? 0.085 : inside ? 0.05 : 0.0105;   // the cellar air is thick
-  scene.environmentIntensity = inside ? 0.08 : 0.6;
+  scene.background.set(inside ? 0x050505 : 0x0b1016);
+  scene.fog.color.set(inside ? 0x0d0b09 : 0x16212c); scene.fog.density = z === 'cellar' ? 0.085 : inside ? 0.05 : 0.02;   // the cellar air is thick   // the cellar air is thick
+  scene.environmentIntensity = inside ? 0.08 : 0.3;
   // far plane just past the walls of wherever you are, so nothing behind them is ever drawn
   camera.far = z === 'yard' ? 260 : z === 'house' ? 26 : z === 'cellar' ? 14 : 12; camera.updateProjectionMatrix();
-  renderer.toneMappingExposure = inside ? 1.2 : 1.0;
+  renderer.toneMappingExposure = inside ? 0.95 : 1.0;
   INTERIOR.set(z);
   const Z = ZONES[z] || { x: 0, z: 0 };
   dust.userData.points.position.set(Z.x, 0, Z.z);
@@ -2107,23 +2134,24 @@ function updatePlayer(dt, t) {
     run = !!(keys.ShiftLeft || keys.ShiftRight || keys.Enter || keys.NumpadEnter);   // Shift or Enter sprints
     if (trans) { f = 0; s = 0; run = false; }        // frozen while the screen is black
   } else {
-    const target = patrol[patrolIdx];
-    const dx = target.x - player.pos.x, dz = target.y - player.pos.z;
-    if (Math.hypot(dx, dz) < 0.7) patrolIdx = (patrolIdx + 1) % patrol.length;
-    const want = Math.atan2(-dx, -dz) + Math.sin(t * 0.31) * 0.35;
-    player.yaw += angleDiff(want, player.yaw) * Math.min(1, dt * 0.9);
-    player.pitch += (Math.sin(t * 0.23) * 0.07 - 0.04 - player.pitch) * Math.min(1, dt);
-    f = Math.abs(angleDiff(want, player.yaw)) < 0.9 ? 0.75 : 0.15;
+    // before the first click the camera just holds the spawn view (facing the house)
+    player.yaw = 0; player.pitch = LEVEL.spawnPitch;
   }
   fwd.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
   right.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
-  wish.set(0, 0, 0).addScaledVector(fwd, f).addScaledVector(right, s);
+  wish.set(0, 0, 0).addScaledVector(fwd, f * (f < 0 ? 0.65 : 1)).addScaledVector(right, s * 0.85);   // backing up and side-stepping are slower
   if (wish.lengthSq() > 1) wish.normalize();
   if (aimT > 0.3) run = false;                     // no sprinting while aiming
-  const speed = (run && f > 0 ? 3.1 : 1.45) * (1 - 0.4 * aimT);
+  const speed = (run && f > 0 ? 4.8 : 2.0) * (1 - 0.4 * aimT);
   wish.multiplyScalar(speed);
   const accel = wish.lengthSq() > 0.01 ? 5.5 : 8;
+  const vx0 = player.vel.x, vz0 = player.vel.z;
   player.vel.lerp(wish, Math.min(1, accel * dt));
+  if (dt > 1e-4) {
+    const ax = (player.vel.x - vx0) / dt, az = (player.vel.z - vz0) / dt;
+    accel3.f += ((ax * fwd.x + az * fwd.z) - accel3.f) * Math.min(1, dt * 10);
+    accel3.r += ((ax * right.x + az * right.z) - accel3.r) * Math.min(1, dt * 10);
+  }
   player.pos.addScaledVector(player.vel, dt);
 
   // collisions: yard bounds, solid boxes (house, containers, fences), prop circles
@@ -2152,7 +2180,7 @@ function updatePlayer(dt, t) {
   player.fy += (floorAt(p.x, p.z) - player.fy) * Math.min(1, dt * 12);
   const v = Math.hypot(player.vel.x, player.vel.z);
   runT += ((run && v > 2 ? 1 : 0) - runT) * Math.min(1, dt * 6);
-  const stride = THREE.MathUtils.lerp(0.72, 0.95, runT);
+  const stride = THREE.MathUtils.lerp(0.8, 1.15, runT);
   player.phase += (v * dt * Math.PI) / stride;
   const idx = Math.floor(player.phase / Math.PI);
   if (idx !== player.stepIdx) {
@@ -2175,13 +2203,17 @@ function updateCamera(dt, t, v) {
   const shP = (Math.sin(t * 1.61 + 0.7) + 0.5 * Math.sin(t * 3.37 + 2.4) + 0.25 * Math.sin(t * 8.3) + 0.1 * Math.sin(t * 19.1 + 1)) * 0.0024 * hs;
   const shR = (Math.sin(t * 0.93 + 2.0) + 0.5 * Math.sin(t * 2.41)) * 0.004 * hs;
   kick.update(dt); kickYaw.update(dt); stepJolt.update(dt);
+  // inertia: the body pitches forward when you start running and rocks back when you stop; strafing rolls the head
+  leanF.update(dt, THREE.MathUtils.clamp(accel3.f * 0.0035, -0.03, 0.03));
+  leanR.update(dt, THREE.MathUtils.clamp(accel3.r * 0.0045, -0.04, 0.04));
+  const fb = Math.cos(ph * 2) * 0.012 * amp;           // head also moves slightly forward and back with each step
 
   camera.position.set(
-    player.pos.x + right.x * bobX + Math.sin(t * 0.7) * 0.004,
-    player.fy + EYE + bobY + stepJolt.x * 0.1 + Math.sin(t * 0.53) * 0.004,
-    player.pos.z + right.z * bobX,
+    player.pos.x + right.x * bobX + fwd.x * fb + Math.sin(t * 0.7) * 0.004,
+    player.fy + EYE + bobY + stepJolt.x * 0.1 - Math.abs(leanF.x) * 0.5 + Math.sin(t * 0.53) * 0.004,
+    player.pos.z + right.z * bobX + fwd.z * fb,
   );
-  camera.rotation.set(player.pitch + pitchB + shP + kick.x * 0.06, player.yaw + yawB + shY + kickYaw.x * 0.03, rollB + shR + kickYaw.x * 0.01);
+  camera.rotation.set(player.pitch + pitchB + shP + kick.x * 0.06 - leanF.x, player.yaw + yawB + shY + kickYaw.x * 0.03, rollB + shR + kickYaw.x * 0.01 - leanR.x);
 }
 
 function updateWeapon(dt, t, v) {
@@ -2209,7 +2241,7 @@ function updateWeapon(dt, t, v) {
   const wantUp = aiming || clock.elapsedTime - lastShot < READY_HOLD || game.reloadT > 0;
   readyT += ((wantUp ? 1 : 0) - readyT) * Math.min(1, dt * (wantUp ? 14 : 3.5));   // snaps up, settles down slowly
   const low = 1 - readyT;
-  camera.fov = THREE.MathUtils.lerp(CAM_FOV, AIM_FOV, A); camera.updateProjectionMatrix();
+  camera.fov = THREE.MathUtils.lerp(CAM_FOV, AIM_FOV, A) + runT * 4 * H; camera.updateProjectionMatrix();
   weaponCam.fov = THREE.MathUtils.lerp(weaponFovBase, weaponFovBase * 0.9, A); weaponCam.updateProjectionMatrix();
   bodycam.uniforms.uK.value = THREE.MathUtils.lerp(0.06, 0.035, A);
   dust.uniforms.uScale.value = 0.0065 * (innerHeight * PR()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
@@ -2231,6 +2263,21 @@ function updateWeapon(dt, t, v) {
   slideT += dt;
   const sl = slideT < 0.025 ? slideT / 0.025 : Math.max(0, 1 - (slideT - 0.025) / 0.06);
   gun.slide.position.z = sl * 0.032;
+  // trigger: squeezes as the shot breaks, then resets
+  const trig = slideT < 0.04 ? slideT / 0.04 : Math.max(0, 1 - (slideT - 0.04) / 0.14);
+  triggerFinger.rotation.y = trig * 0.22;
+  gun.trigger.position.z = -0.022 + trig * 0.004;
+  // forearms and sleeves trail the gun: they swing late on turns, flip up under recoil, sway with each step, and breathe
+  armP.update(dt, swayY.x * 0.8 * sw + recoilP.x * 0.01);
+  armY.update(dt, swayX.x * 1.2 * sw);
+  armR.update(dt, swayX.x * 0.8 * sw);
+  const heart = Math.sin(t * 8.4) * Math.max(0, Math.sin(t * 1.1)) ;
+  armsRig.rotation.set(
+    armP.x * 1.3 + Math.sin(ph - 0.7) * 0.012 * amp + Math.sin(t * 1.4) * 0.006 + runT * 0.08 + recoilP.x * 0.015,
+    armY.x * 1.5 + Math.sin(t * 0.8) * 0.004,
+    armR.x * 1.2 + Math.sin(ph - 0.7) * 0.01 * amp + heart * 0.0015,
+  );
+  handsRig.position.set(Math.sin(t * 1.9) * 0.0004 + heart * 0.0003, Math.sin(t * 1.4) * 0.0006, 0);   // faint hand tremor
   // muzzle flash
   flashT -= dt;
   flash.visible = flashT > 0;
@@ -2254,12 +2301,12 @@ let blackoutUntil = 0;
 function updateLights(dt, t) {
   // when the figure vanishes the daylight dips for a moment, like a cloud passing fast
   const k = t < blackoutUntil ? 0.3 : 1;
-  sunLight.intensity += (1.6 * k - sunLight.intensity) * Math.min(1, dt * 20);
+  sunLight.intensity += (1.9 * k - sunLight.intensity) * Math.min(1, dt * 20);
   // indoors only a little grey daylight gets past the windows
-  const amb = zone === 'yard' ? 1.3 : zone === 'cellar' ? 0.08 : 0.3;
+  const amb = zone === 'yard' ? 1.0 : zone === 'cellar' ? 0.04 : 0.1;
   hemi.intensity += (amb * k - hemi.intensity) * Math.min(1, dt * 20);
   // the gun and gloves sit in the same light as the room around them
-  const wl = zone === 'yard' ? 1 : zone === 'cellar' ? 0.22 : 0.34;
+  const wl = zone === 'yard' ? 0.6 : zone === 'cellar' ? 0.14 : 0.2;
   wHemi.intensity = 2.6 * k * wl; wKey.intensity = 2.2 * k * wl; wSun.intensity = zone === 'yard' ? 0.6 * k : 0;
   return INTERIOR.update(t, zone, camera.position);
 }
@@ -2326,7 +2373,7 @@ const stalker = (() => {
   };
 })();
 
-// ============================================================ tactical HUD (DOM overlay, updated per frame)
+// ============================================================ HUD (DOM overlay, updated per frame)
 const hud = (() => {
   const $ = (id) => document.getElementById(id);
   const el = { hp: $('hp'), mag: $('mag'), reserve: $('reserve'), ammo: $('ammo'), volt: $('volt'), gb: $('gb'), hdg: $('hdgv'), dist: $('dist'), stab: $('stab'), date: $('date'), horizon: $('horizon'), reticle: $('reticle'), banner: $('banner'), bTitle: $('banner-title'), bScore: $('banner-score'), hurt: $('hurt') };
@@ -2451,7 +2498,7 @@ function frame() {
   if (started) {
     if (t > nextAmbient) { audio.ambientEvent(); nextAmbient = t + 7 + Math.random() * 14; }
     if (v > 0.6) lastMoving = t;
-    else if (v < 0.08 && lastMoving > 0 && t - lastMoving < 0.4) { lastMoving = 0; if (Math.random() < 0.18) audio.ghostSteps(2 + Math.floor(Math.random() * 2)); }
+    else if (v < 0.08 && lastMoving > 0 && t - lastMoving < 0.4) { lastMoving = 0;  }
   }
   sparks.update(dt);
   puffs.update(dt);
@@ -2468,6 +2515,7 @@ function frame() {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+if (window.__introStart) window.__introStart();      // scene is ready: let the intro splash begin
 
 // debug hook for automated testing
 // test / debug hook (read-mostly; used by tests/ui.spec.js)

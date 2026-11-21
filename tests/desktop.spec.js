@@ -28,13 +28,15 @@ test.describe('desktop', () => {
     await expect(page.locator('#hint')).toHaveCount(0);
   });
 
-  test('attract mode patrols the yard before the first click', async ({ page }) => {
+  test('before the first click the camera holds the spawn view', async ({ page }) => {
     await boot(page);
     const a = await state(page);
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(1500);
     const b = await state(page);
+    const L = await page.evaluate(() => window.__bodycam.LEVEL);
     expect(a.started).toBe(false);
-    expect(Math.hypot(b.pos[0] - a.pos[0], b.pos[1] - a.pos[1])).toBeGreaterThan(0.8);
+    expect(Math.hypot(b.pos[0] - L.spawn[0], b.pos[1] - L.spawn[1])).toBeLessThan(0.01);
+    expect(Math.hypot(b.pos[0] - a.pos[0], b.pos[1] - a.pos[1])).toBeLessThan(0.01);
   });
 
   test('audio starts on first interaction', async ({ page }) => {

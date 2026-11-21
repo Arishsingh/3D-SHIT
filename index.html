@@ -75,9 +75,53 @@
 
     @media (max-width: 600px) {
     }
+    /* ---- intro splash: the name is written in letter by letter (same effect as neurixstudio.in), then the game is revealed ---- */
+    #intro { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; cursor: pointer; transition: opacity 0.9s ease-in-out; font-family: "Geist", "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif; user-select: none; touch-action: none; }
+    #intro .line { transition: opacity 1.1s ease-in-out, filter 1.1s ease-in-out; }
+    #intro.text-out .line { opacity: 0; filter: blur(3px); }
+    #intro.out { opacity: 0; pointer-events: none; }
+    #intro .line { margin: 0; text-align: center; white-space: pre-wrap; }
+    #intro .name { font-size: clamp(1.6rem, 3.4vw, 2.8rem); font-weight: 300; letter-spacing: 0.02em; padding-left: 0.02em; }
+    #intro .role { font-size: clamp(0.6rem, 1.05vw, 0.85rem); font-weight: 300; letter-spacing: 0.12em; padding-left: 0.12em; color: #fff; }
+    #intro .ch { display: inline-block; opacity: 0; color: #555; filter: blur(1.5px); transform: translateY(0.14em) scale(0.86); animation: intro-write 1.2s cubic-bezier(.25, .1, .25, 1) forwards; animation-play-state: paused; animation-delay: calc(var(--d) + var(--i) * var(--s)); }
+    @keyframes intro-write { 0% { opacity: 0; color: #444; filter: blur(1.5px); transform: translateY(0.14em) scale(0.86); } 50% { opacity: 1; color: #999; } 100% { opacity: 1; color: #fff; filter: none; transform: none; } }
+    #intro.go .ch { animation-play-state: running; }
+    @media (prefers-reduced-motion: reduce) { #intro .ch { animation-duration: 0.01s; animation-delay: 0s; } }
   </style>
 </head>
 <body>
+  <div id="intro" role="status" aria-label="Arish singh, a creative developer"><p class="line name" id="intro-name" aria-hidden="true"></p><p class="line role" id="intro-role" aria-hidden="true"></p></div>
+  <script>
+    (function () {
+      var el = document.getElementById('intro'), done = false;
+      function write(id, text, delay, step) {
+        var h = document.getElementById(id);
+        text.split('').forEach(function (c, i) {
+          var s = document.createElement('span'); s.className = 'ch'; s.style.setProperty('--i', i); s.style.setProperty('--d', delay + 's'); s.style.setProperty('--s', step + 's');
+          s.textContent = c === ' ' ? '\u00a0' : c; if (c === ' ') s.style.width = '0.2em'; h.appendChild(s);
+        });
+      }
+      write('intro-name', 'Arish singh', 0.4, 0.16);
+      write('intro-role', 'A creative developer', 3.4, 0.08);
+      function finish() {
+        if (done) return; done = true; el.classList.add('out');
+        setTimeout(function () { el.remove(); }, 1000);
+      }
+      if (navigator.webdriver) { el.remove(); return; }     // automated tests skip the splash
+      el.addEventListener('pointerdown', function (e) { e.stopPropagation(); finish(); });
+      // name is written, a pause, the text fades away, then the black fades into the game
+      // The animation only starts once the game has built the scene (main.js calls __introStart),
+      // otherwise the heavy start-up work would eat the writing before it could be seen.
+      var started = false;
+      function start() {
+        if (started) return; started = true; el.classList.add('go');
+        setTimeout(function () { if (!done) el.classList.add('text-out'); }, 7200);
+        setTimeout(finish, 8400);
+      }
+      window.__introStart = function () { requestAnimationFrame(function () { requestAnimationFrame(start); }); };
+      setTimeout(start, 12000);                              // safety net if the game fails to load
+    })();
+  </script>
   <canvas id="view"></canvas>
   <div id="hurt"></div>
   <div id="fade"></div>
